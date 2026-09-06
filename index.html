@@ -92,23 +92,23 @@
   .card-canvas .bg canvas{ width:100%; height:100%; display:block; }
   .card-canvas .bg-scrim{ position:absolute; inset:0; pointer-events:none; }
   .card-canvas .content{ position:absolute; inset:0; display:flex; flex-direction:column; padding:7% 8%; pointer-events:none; }
-  .kicker{ font-family:var(--f-hand); font-size:calc(clamp(1.1rem, 6cqw, 1.7rem) * var(--s-kicker,1)); font-weight:700; line-height:1.1; }
+  .kicker{ font-family:var(--f-hand); font-size:calc(clamp(1.1rem, 6cqw, 1.7rem) * var(--s-kicker,1) * var(--fit,1)); font-weight:700; line-height:1.1; }
   .name{ font-family:var(--f-display); font-weight:var(--w-display,800); line-height:1.02; }
   .message{ font-family:var(--f-body); white-space:pre-wrap; line-height:1.4; }
-  .from{ font-family:var(--f-hand); font-weight:700; margin-top:auto; align-self:flex-end; font-size:calc(clamp(1rem, 5.5cqw, 1.5rem) * var(--s-from,1)); opacity:.9; }
+  .from{ font-family:var(--f-hand); font-weight:700; margin-top:auto; align-self:flex-end; font-size:calc(clamp(1rem, 5.5cqw, 1.5rem) * var(--s-from,1) * var(--fit,1)); opacity:.9; }
   .tape{ position:absolute; top:5%; left:-6%; width:38%; height:6.5%; transform:rotate(-8deg); opacity:.9; }
   .rule{ height:3px; width:18%; border-radius:2px; margin:.2em 0 .4em; }
 
   .layout-big-name .content{ justify-content:center; align-items:center; text-align:center; gap:.35em; }
-  .layout-big-name .name{ font-size:calc(clamp(2rem, 14cqw, 3.4rem) * var(--s-name,1)); }
-  .layout-big-name .message{ font-size:calc(clamp(.8rem, 3.6cqw, 1rem) * var(--s-message,1)); max-width:90%; }
+  .layout-big-name .name{ font-size:calc(clamp(2rem, 14cqw, 3.4rem) * var(--s-name,1) * var(--fit,1)); }
+  .layout-big-name .message{ font-size:calc(clamp(.8rem, 3.6cqw, 1rem) * var(--s-message,1) * var(--fit,1)); max-width:90%; }
   .layout-big-name .from{ align-self:center; margin-top:.8em; }
-  .card-canvas[data-format="landscape"].layout-big-name .name{ font-size:calc(clamp(1.8rem, 9cqw, 3rem) * var(--s-name,1)); }
+  .card-canvas[data-format="landscape"].layout-big-name .name{ font-size:calc(clamp(1.8rem, 9cqw, 3rem) * var(--s-name,1) * var(--fit,1)); }
 
   .photo-area{ position:absolute; left:0; right:0; top:0; height:58%; overflow:hidden; }
   .layout-photo-hero .content{ position:absolute; top:58%; left:0; right:0; bottom:0; padding:5% 8% 6%; justify-content:flex-start; gap:.25em; }
-  .layout-photo-hero .name{ font-size:calc(clamp(1.4rem, 8cqw, 2.1rem) * var(--s-name,1)); }
-  .layout-photo-hero .message{ font-size:calc(clamp(.72rem, 3.2cqw, .9rem) * var(--s-message,1)); }
+  .layout-photo-hero .name{ font-size:calc(clamp(1.4rem, 8cqw, 2.1rem) * var(--s-name,1) * var(--fit,1)); }
+  .layout-photo-hero .message{ font-size:calc(clamp(.72rem, 3.2cqw, .9rem) * var(--s-message,1) * var(--fit,1)); }
   .layout-photo-hero .bar{ position:absolute; left:0; right:0; top:58%; height:4px; }
   .card-canvas[data-format="landscape"].layout-photo-hero .photo-area{ height:100%; width:50%; right:auto; }
   .card-canvas[data-format="landscape"].layout-photo-hero .content{ top:0; left:50%; padding:6% 6%; justify-content:center; }
@@ -123,15 +123,15 @@
   .card-canvas[data-format="landscape"] .collage-grid[data-count="3"]{ grid-template-columns:1fr 1fr 1fr; grid-template-rows:1fr; }
   .card-canvas[data-format="landscape"] .collage-grid[data-count="3"] > :first-child{ grid-row:auto; }
   .layout-collage .content{ position:absolute; inset:auto 0 0 0; padding:14% 6% 5%; background:linear-gradient(0deg, rgba(0,0,0,.72) 0%, rgba(0,0,0,.45) 55%, rgba(0,0,0,0) 100%); color:#fff !important; gap:.2em; }
-  .layout-collage .name{ font-size:calc(clamp(1.3rem, 7cqw, 1.9rem) * var(--s-name,1)); }
-  .layout-collage .message{ font-size:calc(clamp(.72rem, 3.2cqw, .9rem) * var(--s-message,1)); }
+  .layout-collage .name{ font-size:calc(clamp(1.3rem, 7cqw, 1.9rem) * var(--s-name,1) * var(--fit,1)); }
+  .layout-collage .message{ font-size:calc(clamp(.72rem, 3.2cqw, .9rem) * var(--s-message,1) * var(--fit,1)); }
   .layout-collage .from{ margin-top:.3em; }
 
   .layout-minimal-note .content{ justify-content:center; gap:.5em; }
   .layout-minimal-note .paper{ position:absolute; inset:7%; border-radius:6px; }
   .layout-minimal-note .content{ padding:14% 15%; }
-  .layout-minimal-note .name{ font-size:calc(clamp(1.5rem, 8cqw, 2.2rem) * var(--s-name,1)); }
-  .layout-minimal-note .message{ font-size:calc(clamp(.8rem, 3.6cqw, 1rem) * var(--s-message,1)); }
+  .layout-minimal-note .name{ font-size:calc(clamp(1.5rem, 8cqw, 2.2rem) * var(--s-name,1) * var(--fit,1)); }
+  .layout-minimal-note .message{ font-size:calc(clamp(.8rem, 3.6cqw, 1rem) * var(--s-message,1) * var(--fit,1)); }
   .card-canvas[data-format="landscape"].layout-minimal-note .content{ padding:8% 12%; }
 
   .card-canvas[data-align="left"] .content{ align-items:flex-start; text-align:left; }
@@ -142,6 +142,24 @@
   .card-canvas[data-align="right"] .content{ align-items:flex-end; text-align:right; }
   .card-canvas[data-align="right"] .from{ align-self:flex-end; }
   .card-canvas[data-align="right"] .rule{ margin-left:auto; }
+
+  .card-canvas[data-vpos="top"] .content{ justify-content:flex-start; }
+  .card-canvas[data-vpos="middle"] .content{ justify-content:center; }
+  .card-canvas[data-vpos="bottom"] .content{ justify-content:flex-end; }
+  .card-canvas[data-vpos] .from{ margin-top:.6em; }
+  .card-canvas[data-space="compact"] .content{ padding:4% 6%; }
+  .card-canvas[data-space="compact"].layout-minimal-note .content{ padding:8% 9%; }
+  .card-canvas[data-space="compact"].layout-minimal-note .paper{ inset:4%; }
+  .card-canvas[data-space="compact"].layout-photo-hero .content{ padding:3% 6% 4%; }
+  .card-canvas[data-space="compact"].layout-collage .content{ padding:10% 5% 4%; }
+  .card-canvas[data-space="airy"] .content{ padding:11% 12%; }
+  .card-canvas[data-space="airy"].layout-minimal-note .content{ padding:18% 18%; }
+  .card-canvas[data-space="airy"].layout-minimal-note .paper{ inset:9%; }
+  .card-canvas[data-space="airy"].layout-photo-hero .content{ padding:7% 10% 8%; }
+  .cal-list{ display:flex; flex-direction:column; }
+  .cal-list .chk{ border-bottom:1px solid var(--paper-edge); }
+  .cal-list .chk:last-child{ border-bottom:none; }
+  .cal-list .chk span{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
   .textblock{ position:absolute; max-width:92%; white-space:pre-wrap; text-align:center; line-height:1.1; touch-action:none; cursor:grab; padding:2px 6px; }
   .sticker.selected, .textblock.selected{ outline:2px dashed rgba(255,255,255,.95); outline-offset:3px; border-radius:6px; box-shadow:0 0 0 2px rgba(0,0,0,.35); }
@@ -436,6 +454,11 @@
       <p class="hint" id="defaultKeywordsHint"></p>
     </div>
     <div class="field">
+      <span class="lbl">Calendars to scan</span>
+      <div id="calPickList" class="cal-list"></div>
+      <p class="hint" id="calPickHint"></p>
+    </div>
+    <div class="field">
       <label for="fromDefaultInput">Default sign-off</label>
       <input type="text" id="fromDefaultInput" autocomplete="off">
     </div>
@@ -510,7 +533,7 @@
 <script>
 (function(){
   'use strict';
-  const APP_VERSION = '1.1.0';
+  const APP_VERSION = '1.1.1';
 
   // ---------- helpers ----------
   function el(tag, attrs, kids){
@@ -642,7 +665,7 @@
   const byId = (list, id) => list.find(x => x.id === id);
 
   // ---------- state ----------
-  const settings = Object.assign({ clientId: '', apiKey: '', keywords: [], from: '— Chris & Kat' }, Store.get('settings', {}));
+  const settings = Object.assign({ clientId: '', apiKey: '', keywords: [], from: '— Chris & Kat', calendars: {} }, Store.get('settings', {}));
   let made = Store.get('made', {});
   let manual = Store.get('manual', []);
   let skipped = Store.get('skipped', {});
@@ -707,7 +730,7 @@
   const COLOR_KEYS = [['ink', 'Ink'], ['a0', 'Accent 1'], ['a1', 'Accent 2'], ['a2', 'Accent 3'], ['paper', 'Paper'], ['white', 'White']];
 
   const uid = () => 'u' + Math.random().toString(36).slice(2, 9);
-  function defaultStyle(){ return { display: 'baloo', body: 'jakarta', hand: 'caveat', sizes: { kicker: 1, name: 1, message: 1, from: 1 }, align: 'auto', color: 'ink', customColor: '#ffffff' }; }
+  function defaultStyle(){ return { display: 'baloo', body: 'jakarta', hand: 'caveat', sizes: { kicker: 1, name: 1, message: 1, from: 1 }, align: 'auto', vpos: 'auto', space: 'normal', color: 'ink', customColor: '#ffffff' }; }
   function defaultBackground(){ return { type: 'solid', angle: 135, color2: 'a0', pattern: 'dots', photo: null, scrim: .35 }; }
   function seedStickers(occ){
     return occ.stickers.map((sid, i) => ({ uid: uid(), stickerId: sid, x: [18, 82, 84][i], y: [14, 12, 86][i], rot: [-8, 10, -4][i], scale: [1, .95, .85][i], flip: false }));
@@ -1081,6 +1104,8 @@
     cardCanvas.className = 'card-canvas layout-' + layout.id;
     cardCanvas.dataset.format = state.format;
     if (st.align === 'auto') cardCanvas.removeAttribute('data-align'); else cardCanvas.dataset.align = st.align;
+    if (!st.vpos || st.vpos === 'auto') cardCanvas.removeAttribute('data-vpos'); else cardCanvas.dataset.vpos = st.vpos;
+    if (!st.space || st.space === 'normal') cardCanvas.removeAttribute('data-space'); else cardCanvas.dataset.space = st.space;
     const fd = fontDef('display', st.display), fb = fontDef('body', st.body), fh = fontDef('hand', st.hand);
     const cs = cardCanvas.style;
     cs.setProperty('--f-display', fd.css); cs.setProperty('--w-display', fd.w); cs.setProperty('--f-body', fb.css); cs.setProperty('--f-hand', fh.css);
@@ -1131,8 +1156,20 @@
       cardCanvas.appendChild(fr);
     }
     drawAllCanvases();
+    fitText();
   }
-  window.addEventListener('resize', () => { if (!$('viewMaker').hidden) drawAllCanvases(); });
+  // Long messages shrink to fit the text box instead of spilling off the card; sizes stay user-tunable on top of this.
+  function fitText(){
+    const cs = cardCanvas.style;
+    cs.setProperty('--fit', 1);
+    let fit = 1;
+    while (fit > 0.5 && cardContent.scrollHeight > cardContent.clientHeight + 1){
+      fit = Math.round((fit - 0.05) * 100) / 100;
+      cs.setProperty('--fit', fit);
+    }
+  }
+  window.addEventListener('resize', () => { if (!$('viewMaker').hidden){ drawAllCanvases(); fitText(); } });
+  if (document.fonts && document.fonts.addEventListener) document.fonts.addEventListener('loadingdone', () => { if (!$('viewMaker').hidden) fitText(); });
 
   // ---------- selection toolbar ----------
   function selectedItem(){
@@ -1267,6 +1304,11 @@
     });
     p.appendChild(lbl('Alignment'));
     p.appendChild(chipRow([['auto', 'Layout default'], ['left', 'Left'], ['center', 'Center'], ['right', 'Right']], st.align, (id) => { st.align = id; render(); touch(); buildStylePanel(); }));
+    p.appendChild(lbl('Text position'));
+    p.appendChild(chipRow([['auto', 'Layout default'], ['top', 'Top'], ['middle', 'Middle'], ['bottom', 'Bottom']], st.vpos || 'auto', (id) => { st.vpos = id; render(); touch(); buildStylePanel(); }));
+    p.appendChild(lbl('Spacing'));
+    p.appendChild(chipRow([['compact', 'Compact'], ['normal', 'Normal'], ['airy', 'Airy']], st.space || 'normal', (id) => { st.space = id; render(); touch(); buildStylePanel(); }));
+    p.appendChild(el('p', { class: 'hint', text: 'Long messages shrink automatically to fit the card. Compact spacing and a smaller Message size give it more room.', style: 'margin-top:8px' }));
     p.appendChild(lbl('Text color'));
     p.appendChild(colorDots(st.color, (k, v) => { st.color = k; if (v) st.customColor = v; render(); touch(); buildStylePanel(); }, currentPalette()));
     p.appendChild(el('div', { class: 'row', style: 'margin-top:14px' }, [toolBtn('Reset style', () => { state.style = defaultStyle(); render(); touch(); buildStylePanel(); })]));
@@ -1641,6 +1683,15 @@
     $('fromDefaultInput').value = settings.from;
     $('apiKeyInput').value = settings.apiKey;
     $('defaultKeywordsHint').textContent = 'Always matched: ' + DEFAULT_KEYWORDS.join(', ') + '. Add more, separated by commas.';
+    const list = $('calPickList'); list.textContent = '';
+    const cals = (calCache && calCache.calendarList) || [];
+    cals.forEach(c => {
+      const cb = el('input', { type: 'checkbox', 'data-cal': c.id }); cb.checked = isCalActive(c);
+      list.appendChild(el('label', { class: 'chk' }, [cb, el('span', { text: c.summary, title: c.summary })]));
+    });
+    $('calPickHint').textContent = cals.length
+      ? 'Unchecked calendars are left out of the scan. By default only calendars you keep visible in Google Calendar are scanned.'
+      : 'Sign in and refresh once to load your calendars here. By default only calendars you keep visible in Google Calendar are scanned.';
     $('versionLabel').textContent = 'Celebrate v' + APP_VERSION;
     settingsOverlay.hidden = false;
   }
@@ -1652,11 +1703,15 @@
     settings.keywords = $('keywordsInput').value.split(/[,\n]/).map(s => s.trim().toLowerCase()).filter(Boolean);
     settings.from = $('fromDefaultInput').value.trim() || '— Chris & Kat';
     settings.apiKey = $('apiKeyInput').value.trim();
+    const before = JSON.stringify(settings.calendars || {});
+    settings.calendars = {};
+    $('calPickList').querySelectorAll('input[data-cal]').forEach(cb => { settings.calendars[cb.dataset.cal] = cb.checked; });
     Store.set('settings', settings);
     tokenClient = null;
     settingsOverlay.hidden = true;
     showToast('Settings saved');
     buildUpcoming();
+    if (token && JSON.stringify(settings.calendars) !== before) refreshUpcoming();
   });
   $('signOutBtn').addEventListener('click', () => {
     if (token && window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(token, () => {});
@@ -1727,7 +1782,9 @@
     const today = AZ.today(), end = AZ.addDays(today, 30);
     try {
       // Holiday calendars are skipped: "Washington's Birthday" is not someone we owe a card.
-      const cals = (await listAll('/users/me/calendarList', { showHidden: 'true' })).filter(c => !/#holiday@group\.v\.calendar\.google\.com$/.test(c.id));
+      const allCals = (await listAll('/users/me/calendarList', { showHidden: 'true' })).filter(c => !/#holiday@group\.v\.calendar\.google\.com$/.test(c.id));
+      const calendarList = allCals.map(c => ({ id: c.id, summary: c.summary || c.id, selected: c.selected !== false }));
+      const cals = allCals.filter(c => isCalActive({ id: c.id, selected: c.selected !== false }));
       const found = [];
       await Promise.all(cals.map(async cal => {
         let events;
@@ -1751,10 +1808,10 @@
           found.push({ name: extractName(title, kw), occasionId: KEYWORD_OCCASION[kw] || 'congrats', date, title, calendar: cal.summary || cal.id, source: 'calendar' });
         }
       }));
-      calCache = { fetchedAt: new Date().toISOString(), calendars: cals.length, items: found };
+      calCache = { fetchedAt: new Date().toISOString(), calendars: cals.length, total: allCals.length, calendarList, items: found };
       Store.set('calCache', calCache);
       buildUpcoming();
-      showToast(`Scanned ${cals.length} calendar${cals.length === 1 ? '' : 's'}`);
+      showToast(`Scanned ${cals.length} of ${allCals.length} calendars`);
     } catch (e) {
       if (e.message === 'AUTH'){ setStatus('Session expired — sign in again.'); }
       else if (e.message === 'FORBIDDEN'){ setStatus('Google said no (403). Is the Calendar API enabled for your OAuth project, and is this origin authorized?'); }
@@ -1763,6 +1820,11 @@
     }
   }
   function setStatus(msg){ $('calStatus').textContent = msg; }
+  // Calendars you've unchecked in Google's sidebar are noise by definition; Birthdays stays on unless you say otherwise.
+  function isCalActive(c){
+    if (settings.calendars && Object.prototype.hasOwnProperty.call(settings.calendars, c.id)) return !!settings.calendars[c.id];
+    return c.selected !== false || c.id === BIRTHDAY_CAL;
+  }
 
   function ago(iso){
     const m = Math.round((Date.now() - new Date(iso)) / 60000);
@@ -1855,7 +1917,7 @@
     $('setupCard').hidden = !!(settings.clientId && (calCache || token));
     $('signInBtn').hidden = !!token;
     if (updateStatus){
-      if (token) setStatus(calCache ? `Signed in · ${calCache.calendars} calendars · updated ${ago(calCache.fetchedAt)}` : 'Signed in');
+      if (token) setStatus(calCache ? `Signed in · scanning ${calCache.calendars}${calCache.total ? ' of ' + calCache.total : ''} calendars (choose in Settings) · updated ${ago(calCache.fetchedAt)}` : 'Signed in');
       else if (calCache) setStatus(`Last scan ${ago(calCache.fetchedAt)} · sign in to refresh`);
       else setStatus(settings.clientId ? 'Sign in to scan your calendars.' : 'Add your Google client ID in Settings to connect a calendar.');
     }
