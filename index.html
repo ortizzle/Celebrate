@@ -82,9 +82,17 @@
   main{ display:grid; gap:18px; grid-template-columns:1fr; }
   @media (min-width:860px){ main.maker{ grid-template-columns:420px 1fr; align-items:start; } }
 
+  /* Only the card itself pins in place while scrolling the editor — Share/Download/etc., in the
+     sibling .stage-tools section, scroll away normally below it since they're only needed once. */
   .stage{ background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.16); border-radius:22px; padding:16px;
     position:sticky; top:max(10px, env(safe-area-inset-top)); z-index:5; }
   .stage-frame{ display:flex; justify-content:center; width:100%; }
+  .stage-tools{ margin-top:14px; }
+  @media (min-width:860px){
+    .stage{ grid-column:1; grid-row:1; }
+    .stage-tools{ grid-column:1; grid-row:2; margin-top:0; }
+    .panel-card{ grid-column:2; grid-row:1 / span 2; }
+  }
   .card-canvas{ position:relative; width:min(100%, 340px); aspect-ratio:4/5; border-radius:14px; overflow:hidden; container-type:inline-size;
     box-shadow:0 18px 34px rgba(0,0,0,.35); --f-display:'Baloo 2', sans-serif; --f-body:'Plus Jakarta Sans', sans-serif; --f-hand:'Caveat', cursive; }
   .card-canvas[data-format="landscape"]{ aspect-ratio:16/9; width:min(100%, 480px); }
@@ -252,6 +260,9 @@
   .chip[aria-pressed="true"]{ background:var(--accent); color:var(--accent-ink); border-color:transparent; }
   .chip[aria-pressed="true"] small{ color:var(--accent-ink); opacity:.85; }
   .chip.sm{ min-height:48px; padding:6px 12px; flex-direction:row; align-items:center; }
+  .occ-current{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; border-radius:14px; background:var(--paper-2); border:1px solid var(--paper-edge); }
+  .occ-current b{ display:block; font-size:1rem; }
+  .occ-current .hint{ margin:2px 0 0; }
 
   .swatch-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:10px; }
   .swatch{ border-radius:14px; border:2px solid transparent; padding:10px; cursor:pointer; text-align:left; background:var(--paper-2); color:var(--ink); }
@@ -400,6 +411,9 @@
           <div class="content" id="cardContent"></div>
         </div>
       </div>
+    </section>
+
+    <section class="stage-tools" aria-label="Share and export">
       <div class="selbar" id="selBar" hidden></div>
       <div class="stage-actions">
         <button class="btn primary wide" id="shareBtn" type="button">
@@ -408,6 +422,7 @@
         </button>
         <button class="btn ghost" id="exportBtn" type="button">Preview PNG</button>
         <button class="btn ghost" id="downloadBtn" type="button">Download PNG</button>
+        <button class="btn ghost" id="gifBtn" type="button">Animated GIF</button>
         <button class="btn ghost" id="copyMsgBtn" type="button">Copy message</button>
         <button class="btn ghost" id="emailBtn" type="button">Email HTML</button>
       </div>
@@ -534,11 +549,12 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
 (function(){
   'use strict';
-  const APP_VERSION = '1.2.0';
+  const APP_VERSION = '1.3.2';
 
   // ---------- helpers ----------
   function el(tag, attrs, kids){
@@ -1234,7 +1250,7 @@
   }
 
   // ---------- editor panels ----------
-  const TABS = [['Occasion', 'panelOccasion'], ['Text', 'panelText'], ['Style', 'panelStyle'], ['Photo', 'panelPhoto'], ['Stickers', 'panelStickers'], ['Layout', 'panelLayout'], ['Colors', 'panelPalette']];
+  const TABS = [['Occasion', 'panelOccasion'], ['Layout', 'panelLayout'], ['Style', 'panelStyle'], ['Photo', 'panelPhoto'], ['Text', 'panelText'], ['Colors', 'panelPalette'], ['Stickers', 'panelStickers']];
   const tabsEl = $('tabs');
   TABS.forEach(([label, panel], i) => tabsEl.appendChild(el('button', { class: 'tab', role: 'tab', type: 'button', 'aria-selected': i === 0 ? 'true' : 'false', 'aria-controls': panel, text: label, onclick: () => selectTab(label) })));
   function selectTab(label){
@@ -1257,19 +1273,40 @@
     if (opts.name !== undefined) state.name = opts.name;
     state.sourceKey = opts.sourceKey || null;
     selected = null;
+    occasionExpanded = false;
     touch();
   }
 
+  // Picking an occasion sets the tone for everything downstream, so it doesn't need to stay
+  // sprawled across the screen afterward — it collapses to a one-line summary with a Change link.
+  let occasionExpanded = true;
   function buildOccasionPanel(){
     const p = $('panelOccasion'); p.textContent = '';
+    const occ = currentOccasion();
+    if (!occasionExpanded){
+      p.appendChild(lbl('Occasion', 'margin-bottom:10px'));
+      p.appendChild(el('div', { class: 'occ-current' }, [
+        el('div', {}, [el('b', { text: occ.label }), el('div', { class: 'hint', text: occ.kicker })]),
+        el('button', { class: 'btn quiet', type: 'button', text: 'Change', onclick: () => { occasionExpanded = true; buildOccasionPanel(); } })
+      ]));
+      p.appendChild(el('div', { class: 'row', style: 'margin-top:14px' }, [
+        el('button', { class: 'btn primary', type: 'button', text: '✨ Auto-design this card', onclick: (e) => autoDesign(e.currentTarget) })
+      ]));
+      p.appendChild(el('p', { class: 'hint', text: 'Claude picks a palette, layout, fonts, stickers and message for this occasion — it never sees your photos.', style: 'margin-top:8px' }));
+      return;
+    }
     p.appendChild(lbl('Occasion', 'margin-bottom:10px'));
     const grid = el('div', { class: 'chip-grid' });
-    OCCASIONS.forEach(occ => {
-      grid.appendChild(el('button', { class: 'chip', type: 'button', 'aria-pressed': occ.id === state.occasionId ? 'true' : 'false',
-        onclick: () => { applyOccasion(occ); buildAll(); showToast(occ.label + ' — palette, layout and message updated'); } },
-        [el('span', { text: occ.label }), el('small', { text: occ.kicker })]));
+    OCCASIONS.forEach(o => {
+      grid.appendChild(el('button', { class: 'chip', type: 'button', 'aria-pressed': o.id === state.occasionId ? 'true' : 'false',
+        onclick: () => { applyOccasion(o); buildAll(); selectTab('Layout'); showToast(o.label + ' — palette, layout and message updated'); } },
+        [el('span', { text: o.label }), el('small', { text: o.kicker })]));
     });
     p.appendChild(grid);
+    p.appendChild(el('div', { class: 'row', style: 'margin-top:14px' }, [
+      el('button', { class: 'btn primary', type: 'button', text: '✨ Auto-design this card', onclick: (e) => autoDesign(e.currentTarget) })
+    ]));
+    p.appendChild(el('p', { class: 'hint', text: 'Claude picks a palette, layout, fonts, stickers and message for this occasion — it never sees your photos.', style: 'margin-top:8px' }));
   }
 
   function buildTextPanel(){
@@ -1360,6 +1397,80 @@
       if (String(e.message).startsWith('HTTP 401')) showToast('Claude rejected the API key — check it in Settings');
       else showToast('Couldn’t reach Claude — check your key and connection');
     }
+  }
+
+  async function autoDesign(btn){
+    if (!settings.apiKey){ showToast('Add an Anthropic API key in Settings to use this'); return; }
+    const occ = currentOccasion(), about = (state.about || '').trim();
+    const old = btn.textContent; btn.disabled = true; btn.textContent = 'Designing…';
+    showToast('Asking Claude to design this card…');
+    const paletteIds = PALETTES.map(p => p.id), layoutIds = LAYOUTS.map(l => l.id);
+    const displayIds = FONTS.display.map(f => f.id), bodyIds = FONTS.body.map(f => f.id), handIds = FONTS.hand.map(f => f.id);
+    const stickerIds = Object.keys(STICKERS), frameIds = FRAMES.map(([id]) => id), patternIds = PATTERNS.map(([id]) => id);
+    const prompt = `Design a ${occ.label} card for ${state.name.trim() || 'a friend'}.` + (about ? ` About them: ${about}.` : '') + `
+Pick ONE creative, cohesive combination — don't default to the safest option. Respond with ONLY this JSON, no markdown fences, no commentary:
+{
+  "message": "2-3 sentence card message, no greeting line, no sign-off, no emoji",
+  "paletteId": one of [${paletteIds.join(', ')}],
+  "layoutId": one of [${layoutIds.join(', ')}],
+  "displayFont": one of [${displayIds.join(', ')}],
+  "bodyFont": one of [${bodyIds.join(', ')}],
+  "handFont": one of [${handIds.join(', ')}],
+  "stickerIds": array of 2-4 from [${stickerIds.join(', ')}],
+  "frame": one of [${frameIds.join(', ')}],
+  "background": "solid" or "gradient" or "pattern",
+  "pattern": one of [${patternIds.join(', ')}] (only matters if background is "pattern"),
+  "align": one of ["auto","left","center","right"]
+}`;
+    try {
+      const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 25000);
+      let res;
+      try {
+        res = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST', signal: ctl.signal,
+          headers: { 'Content-Type': 'application/json', 'x-api-key': settings.apiKey, 'anthropic-version': '2023-06-01',
+            'anthropic-beta': 'server-side-fallback-2026-07-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+          body: JSON.stringify({
+            model: 'claude-opus-5', max_tokens: 600, output_config: { effort: 'medium' }, fallbacks: 'default',
+            system: 'You are a card designer. Reply with strict JSON only — no markdown fences, no prose.' + (occ.quiet ? ' Keep the tone gentle and sincere: no exclamation points, quiet colors, no confetti-style stickers.' : ''),
+            messages: [{ role: 'user', content: prompt }]
+          })
+        });
+      } finally { clearTimeout(timer); }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      if (data.stop_reason === 'refusal') throw new Error('refusal');
+      let text = data.content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
+      text = text.replace(/^```(json)?/i, '').replace(/```$/, '').trim();
+      const j = JSON.parse(text);
+      const pick = (val, list, fallback) => list.includes(val) ? val : fallback;
+
+      if (typeof j.message === 'string' && j.message.trim()){ state.message = j.message.trim(); state.lastAutoMessage = state.message; }
+      state.paletteId = pick(j.paletteId, paletteIds, state.paletteId);
+      state.layoutId = pick(j.layoutId, layoutIds, state.layoutId);
+      state.colors = {};
+      state.style.display = pick(j.displayFont, displayIds, state.style.display);
+      state.style.body = pick(j.bodyFont, bodyIds, state.style.body);
+      state.style.hand = pick(j.handFont, handIds, state.style.hand);
+      state.style.align = pick(j.align, ['auto', 'left', 'center', 'right'], state.style.align);
+      state.frame = pick(j.frame, frameIds, state.frame);
+      const bgType = pick(j.background, ['solid', 'gradient', 'pattern'], 'solid');
+      state.background = Object.assign(defaultBackground(), state.background.photo ? { photo: state.background.photo } : {}, {
+        type: bgType, pattern: pick(j.pattern, patternIds, 'dots'), angle: [45, 90, 135, 180, 225, 270][Math.floor(Math.random() * 6)]
+      });
+      if (Array.isArray(j.stickerIds)){
+        const valid = j.stickerIds.filter(id => STICKERS[id]).slice(0, 4);
+        const spots = [[22, 16], [80, 14], [16, 84], [84, 84]];
+        if (valid.length) state.stickers = valid.map((id, i) => ({ uid: uid(), stickerId: id, x: spots[i][0], y: spots[i][1], rot: (i % 2 ? 8 : -8), scale: 1, flip: false }));
+      }
+      await Promise.all([fontDef('display', state.style.display), fontDef('body', state.style.body), fontDef('hand', state.style.hand)].map(loadFont));
+      selected = null; resetHistory(); touch(); buildAll();
+      showToast('Designed! Tweak anything you like, or tap again for another take.');
+    } catch (e) {
+      if (String(e.message).startsWith('HTTP 401')) showToast('Claude rejected the API key — check it in Settings');
+      else if (e.name === 'AbortError') showToast('Claude took too long — try again');
+      else showToast('Couldn’t design the card — check your key and connection');
+    } finally { btn.disabled = false; btn.textContent = old; }
   }
 
   function importPhoto(file, cb){
@@ -1641,6 +1752,70 @@
   }
   async function ensureBlob(){ return (!dirty && lastBlob) ? lastBlob : renderPng(); }
 
+  // Browsers refuse new Worker(crossOriginURL) outright — gif.js's own worker creation would throw
+  // a SecurityError pointed straight at the cdnjs URL. Fetching the script text and wrapping it in a
+  // same-origin blob: URL is the standard workaround.
+  let gifWorkerUrl = null;
+  async function ensureGifWorker(){
+    if (gifWorkerUrl) return gifWorkerUrl;
+    const res = await fetch('https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js');
+    if (!res.ok) throw new Error('worker fetch failed: ' + res.status);
+    const text = await res.text();
+    gifWorkerUrl = URL.createObjectURL(new Blob([text], { type: 'application/javascript' }));
+    return gifWorkerUrl;
+  }
+  const findAnimatedSticker = () => state.stickers.find(s => STICKERS[s.stickerId] && STICKERS[s.stickerId].animate);
+
+  async function renderGif(){
+    if (typeof GIF === 'undefined'){ showToast('The GIF encoder didn’t load — check your connection and try again'); return null; }
+    const animRec = findAnimatedSticker();
+    if (!animRec){ showToast('Add a confetti or candle sticker to export an animated GIF'); return null; }
+    let workerScript;
+    try { workerScript = await ensureGifWorker(); }
+    catch (e) { showToast('Couldn’t load the GIF encoder — check your connection'); return null; }
+
+    await withTimeout(Promise.all(usedFontDefs().map(loadFont)), 4000);
+    await withTimeout(document.fonts.ready, 3000);
+    if (selected){ selected = null; render(); renderSelBar(); }
+    drawAllCanvases();
+    const kind = STICKERS[animRec.stickerId].animate; // 'drift' (confetti) or 'flicker' (candle)
+    const stickerEl = cardCanvas.querySelector(`.sticker[data-uid="${animRec.uid}"]`);
+    const flames = kind === 'flicker' && stickerEl ? [...stickerEl.querySelectorAll('.flame')] : [];
+    cardCanvas.classList.add('exporting');
+    const parked = [...fontLinks.values()].filter(e => !e.done && e.link && e.link.isConnected);
+    parked.forEach(e => e.link.remove());
+    const { w: PW, h: PH } = FORMATS[state.format] || FORMATS.portrait;
+    const GIFW = state.format === 'landscape' ? 640 : (state.format === 'square' ? 540 : 480);
+    const GIFH = Math.round(GIFW * PH / PW);
+    const FRAMES_N = 10, DUR = kind === 'flicker' ? 1100 : 2400;
+    try {
+      const gif = new GIF({ workers: 2, quality: 12, width: GIFW, height: GIFH, workerScript });
+      const rect = cardCanvas.getBoundingClientRect(), scale = GIFW / rect.width;
+      for (let i = 0; i < FRAMES_N; i++){
+        const t = i / (FRAMES_N - 1);
+        const p = t <= 0.5 ? t * 2 : (1 - t) * 2;   // ping-pong 0→1→0, matching the CSS "alternate" loop
+        if (stickerEl && kind === 'drift') stickerEl.style.transform = `translate(-50%,-50%) rotate(${animRec.rot}deg) scaleX(${animRec.flip ? -1 : 1}) translateY(${p * 10}px)`;
+        else if (flames.length) flames.forEach(f => f.style.opacity = String(1 - p * 0.22));
+        const frame = await html2canvas(cardCanvas, {
+          scale, backgroundColor: null, useCORS: true, logging: false,
+          onclone: (doc) => doc.querySelectorAll('.sticker, .sticker .flame').forEach(n => { n.style.animation = 'none'; })
+        });
+        gif.addFrame(frame, { delay: Math.round(DUR / FRAMES_N), copy: true });
+      }
+      const blob = await new Promise((resolve, reject) => {
+        gif.on('finished', (b) => resolve(b));
+        gif.on('abort', () => reject(new Error('GIF encoding was aborted')));
+        gif.render();
+      });
+      return blob;
+    } finally {
+      if (stickerEl) stickerEl.style.transform = '';
+      flames.forEach(f => f.style.opacity = '');
+      cardCanvas.classList.remove('exporting');
+      parked.forEach(e => { if (!e.done && !e.link.isConnected) document.head.appendChild(e.link); });
+    }
+  }
+
   function markMade(){
     if (!state.sourceKey) return;
     made[state.sourceKey] = { at: new Date().toISOString() };
@@ -1654,16 +1829,24 @@
     try { await fn(); } catch (e) { console.error('action failed', e); showToast('That didn’t work — try again'); } finally { btn.disabled = false; btn.textContent = old; }
   }
 
+  // Whatever's currently shown in the export overlay — PNG from Preview/Share, or GIF — so its
+  // Share/Download buttons send the right file instead of always assuming a PNG.
+  let exportState = null;
+  function openExportPreview(es, note){
+    exportState = es;
+    $('exportImg').src = URL.createObjectURL(es.blob);
+    $('exportNote').textContent = note;
+    exportOverlay.hidden = false;
+  }
+
   $('exportBtn').addEventListener('click', () => withBusy($('exportBtn'), 'Rendering…', async () => {
     const blob = await renderPng();
-    $('exportImg').src = URL.createObjectURL(blob);
-    $('exportNote').textContent = 'Long-press the image to save it, or use Share / Download.';
-    exportOverlay.hidden = false;
+    openExportPreview({ blob, filename: 'celebrate-card.png', mime: 'image/png' }, 'Long-press the image to save it, or use Share / Download.');
     markMade();
   }));
 
-  async function shareBlob(blob){
-    const file = new File([blob], 'celebrate-card.png', { type: 'image/png' });
+  async function shareBlob(blob, filename, mime){
+    const file = new File([blob], filename, { type: mime });
     if (!(navigator.canShare && navigator.canShare({ files: [file] }))) return 'unsupported';
     try { await navigator.share({ files: [file], text: fullText() }); return 'shared'; }
     catch (e) { return e && e.name === 'AbortError' ? 'cancelled' : 'blocked'; }
@@ -1671,23 +1854,44 @@
   async function doShare(btn){
     await withBusy(btn, 'Preparing…', async () => {
       const blob = await ensureBlob();
-      const r = await shareBlob(blob);
+      const es = { blob, filename: 'celebrate-card.png', mime: 'image/png' };
+      const r = await shareBlob(blob, es.filename, es.mime);
       if (r === 'shared') { showToast('Shared'); markMade(); archiveSent('Share', blob); }
-      else if (r === 'unsupported') { showToast('Sharing files isn’t available here — use Download or Copy message'); $('exportImg').src = URL.createObjectURL(blob); $('exportNote').textContent = 'Long-press the image to save it.'; exportOverlay.hidden = false; }
-      else if (r === 'blocked') { $('exportImg').src = URL.createObjectURL(blob); $('exportNote').textContent = 'Card is ready — tap Share once more to open the share sheet.'; exportOverlay.hidden = false; }
+      else if (r === 'unsupported') { showToast('Sharing files isn’t available here — use Download or Copy message'); openExportPreview(es, 'Long-press the image to save it.'); }
+      else if (r === 'blocked') openExportPreview(es, 'Card is ready — tap Share once more to open the share sheet.');
     });
   }
   $('shareBtn').addEventListener('click', () => doShare($('shareBtn')));
-  $('exportShareBtn').addEventListener('click', () => doShare($('exportShareBtn')));
+  $('exportShareBtn').addEventListener('click', () => withBusy($('exportShareBtn'), 'Preparing…', async () => {
+    if (!exportState) return;
+    const isGif = exportState.mime === 'image/gif';
+    const r = await shareBlob(exportState.blob, exportState.filename, exportState.mime);
+    if (r === 'shared') { showToast('Shared'); markMade(); archiveSent(isGif ? 'GIF' : 'Share', exportState.blob); }
+    else if (r === 'unsupported') showToast('Sharing files isn’t available here — try Download instead');
+    else if (r === 'blocked') showToast('Tap Share once more to open the share sheet');
+  }));
 
-  function downloadBlob(blob){
+  function downloadBlob(blob, filename){
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = 'celebrate-card.png';
+    a.href = URL.createObjectURL(blob); a.download = filename;
     document.body.appendChild(a); a.click(); a.remove();
-    markMade(); archiveSent('Download', blob);
   }
-  $('downloadBtn').addEventListener('click', () => withBusy($('downloadBtn'), 'Rendering…', async () => downloadBlob(await ensureBlob())));
-  $('exportDownloadBtn').addEventListener('click', () => { if (lastBlob) downloadBlob(lastBlob); });
+  $('downloadBtn').addEventListener('click', () => withBusy($('downloadBtn'), 'Rendering…', async () => {
+    const blob = await ensureBlob();
+    downloadBlob(blob, 'celebrate-card.png');
+    markMade(); archiveSent('Download', blob);
+  }));
+  $('exportDownloadBtn').addEventListener('click', () => {
+    if (!exportState) return;
+    downloadBlob(exportState.blob, exportState.filename);
+    markMade(); archiveSent(exportState.mime === 'image/gif' ? 'GIF' : 'Download', exportState.blob);
+  });
+  $('gifBtn').addEventListener('click', () => withBusy($('gifBtn'), 'Making GIF…', async () => {
+    const blob = await renderGif();
+    if (!blob) return;
+    openExportPreview({ blob, filename: 'celebrate-card.gif', mime: 'image/gif' }, 'Long-press the GIF to save it, or use Share / Download.');
+    markMade(); archiveSent('GIF', blob);
+  }));
 
   $('copyMsgBtn').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(fullText()); showToast('Message copied'); }
@@ -1994,7 +2198,7 @@
       onclick: () => { if (made[it.key]) delete made[it.key]; else made[it.key] = { at: new Date().toISOString() }; Store.set('made', made); buildUpcoming(false); } });
     check.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
     const make = el('button', { class: 'btn ' + (isMade ? 'quiet' : 'primary'), type: 'button', text: isMade ? 'Again' : 'Make card',
-      onclick: () => { applyOccasion(occ, { name: it.name, sourceKey: it.key, resetMessage: true }); buildAll(); selectTab('Text'); showView('maker'); } });
+      onclick: () => { applyOccasion(occ, { name: it.name, sourceKey: it.key, resetMessage: true }); buildAll(); selectTab('Layout'); showView('maker'); } });
     const more = el('button', { class: 'icon-btn on-paper', type: 'button', 'aria-label': 'More options for ' + it.name, text: '⋯', onclick: () => rowMenu(it, occ) });
     const actions = el('div', { class: 'occ-actions' }, [check, make, more]);
     return el('div', { class: 'occ-row' + (it.days === 0 ? ' today' : '') }, [
