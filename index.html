@@ -1162,8 +1162,17 @@
   function fitText(){
     const cs = cardCanvas.style;
     cs.setProperty('--fit', 1);
+    // Centered flex content overflows upward as well as down, which scrollHeight never reports — measure the children's span instead.
+    const fits = () => {
+      const kids = [...cardContent.children]; if (!kids.length) return true;
+      const r = cardContent.getBoundingClientRect(), st = getComputedStyle(cardContent);
+      const inner = r.height - parseFloat(st.paddingTop) - parseFloat(st.paddingBottom);
+      let top = Infinity, bottom = -Infinity;
+      kids.forEach(k => { const b = k.getBoundingClientRect(); top = Math.min(top, b.top); bottom = Math.max(bottom, b.bottom); });
+      return bottom - top <= inner + 1;
+    };
     let fit = 1;
-    while (fit > 0.5 && cardContent.scrollHeight > cardContent.clientHeight + 1){
+    while (fit > 0.5 && !fits()){
       fit = Math.round((fit - 0.05) * 100) / 100;
       cs.setProperty('--fit', fit);
     }
