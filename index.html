@@ -312,6 +312,13 @@
   details.add-occ summary::before{ content:'+'; font-family:'Baloo 2',sans-serif; font-size:1.4rem; margin-right:8px; color:var(--accent); }
   details[open].add-occ summary::before{ content:'–'; }
   .chk{ display:flex; align-items:center; gap:10px; min-height:48px; font-size:.95rem; }
+  .person-row{ width:100%; text-align:left; font:inherit; color:inherit; cursor:pointer; }
+  .initials{ width:52px; height:52px; border-radius:14px; background:var(--accent-2); color:#3a2a00; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:1.2rem; display:flex; align-items:center; justify-content:center; }
+  .notes-preview{ font-size:.82rem; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
+  .person-dates{ display:flex; flex-wrap:wrap; gap:6px; }
+  .name-btn{ background:none; border:none; padding:0; min-height:48px; font:inherit; font-weight:700; font-size:1rem; color:var(--ink); text-align:left; cursor:pointer;
+    text-decoration:underline dotted; text-underline-offset:3px; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block; }
+  .sheet .field textarea{ min-height:110px; }
   .chk input{ width:22px; height:22px; accent-color:var(--accent); }
 
   .toast-region{ position:fixed; left:0; right:0; bottom:calc(env(safe-area-inset-bottom) + 16px); display:flex; flex-direction:column; align-items:center; gap:8px; pointer-events:none; z-index:80; padding:0 14px; }
@@ -344,6 +351,7 @@
     <div class="header-right">
       <nav class="nav" aria-label="Screens">
         <button type="button" id="navUpcoming" aria-pressed="true">Upcoming</button>
+        <button type="button" id="navPeople" aria-pressed="false">People</button>
         <button type="button" id="navMaker" aria-pressed="false">Make a card</button>
       </nav>
       <button class="icon-btn" id="settingsBtn" aria-label="Open settings" type="button">
@@ -402,6 +410,23 @@
     </section>
   </main>
 
+  <!-- People -->
+  <main id="viewPeople" hidden>
+    <section class="panel-card" aria-label="People">
+      <div class="panel-head"><h2>People</h2></div>
+      <p class="hint" id="peopleHint" style="margin-bottom:12px"></p>
+      <div id="peopleList" class="occ-list"></div>
+      <details class="add-occ" id="addPerson">
+        <summary>Add a person</summary>
+        <div class="field" style="margin-top:8px">
+          <label for="newPersonName">Name</label>
+          <input type="text" id="newPersonName" placeholder="Aunt Jane" autocomplete="off">
+        </div>
+        <div class="row"><button class="btn primary" id="addPersonBtn" type="button">Add</button></div>
+      </details>
+    </section>
+  </main>
+
   <!-- Maker -->
   <main id="viewMaker" class="maker" hidden>
     <section class="stage" aria-label="Card preview">
@@ -437,6 +462,7 @@
         </div>
       </div>
       <div class="editor-tools">
+        <button class="btn quiet" id="personPill" type="button">Link to a person</button>
         <button class="btn quiet" id="saveDraftBtn" type="button">Save draft</button>
         <button class="btn quiet" id="draftsBtn" type="button">Drafts</button>
         <button class="btn quiet" id="newCardBtn" type="button">New card</button>
@@ -500,7 +526,16 @@
     <div class="row">
       <button class="btn primary" id="exportShareBtn" type="button">Share</button>
       <button class="btn quiet" id="exportDownloadBtn" type="button">Download</button>
+      <button class="btn quiet" id="exportDriveBtn" type="button">Save to Drive</button>
     </div>
+  </div>
+</div>
+
+<div class="overlay" id="personOverlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="personTitle" style="max-width:560px">
+    <div class="close-row"><button class="icon-btn on-paper" id="closePerson" aria-label="Close" type="button">✕</button></div>
+    <h3 id="personTitle"></h3>
+    <div id="personBody"></div>
   </div>
 </div>
 
@@ -554,7 +589,7 @@
 <script>
 (function(){
   'use strict';
-  const APP_VERSION = '1.3.2';
+  const APP_VERSION = '1.4.0';
 
   // ---------- helpers ----------
   function el(tag, attrs, kids){
@@ -762,14 +797,14 @@
       id: null, title: '', occasionId: occ.id, name, message: occ.starter, lastAutoMessage: occ.starter, about: '',
       from: settings.from, paletteId: occ.palette, layoutId: occ.layout, format: 'portrait',
       photos: [null, null, null], stickers: seedStickers(occ), texts: [], style: defaultStyle(), colors: {},
-      background: defaultBackground(), frame: 'none', sourceKey: null
+      background: defaultBackground(), frame: 'none', sourceKey: null, personKey: null, personName: ''
     };
   }
   // Drafts written by v1.0 lack format/style/texts — fill the gaps instead of crashing on them.
   function normalizeDraft(d){
     const out = Object.assign(defaultDraft(d.occasionId, d.name || ''), d);
     if (!FORMATS[d.format]) out.format = d.orientation === 'landscape' ? 'landscape' : 'portrait';
-    delete out.orientation; delete out.thumb; delete out.savedAt; delete out.draftId;
+    delete out.orientation; delete out.thumb; delete out.savedAt; delete out.draftId; delete out.file; delete out.mime; delete out.driveId; delete out.driveLink;
     if (!Array.isArray(out.photos) || out.photos.length < 3) out.photos = [out.photos?.[0] || null, out.photos?.[1] || null, null];
     out.style = Object.assign(defaultStyle(), out.style || {});
     out.style.sizes = Object.assign({ kicker: 1, name: 1, message: 1, from: 1 }, out.style.sizes || {});
@@ -874,13 +909,17 @@
 
   function showView(which){
     $('viewUpcoming').hidden = which !== 'upcoming';
+    $('viewPeople').hidden = which !== 'people';
     $('viewMaker').hidden = which !== 'maker';
     $('navUpcoming').setAttribute('aria-pressed', which === 'upcoming' ? 'true' : 'false');
+    $('navPeople').setAttribute('aria-pressed', which === 'people' ? 'true' : 'false');
     $('navMaker').setAttribute('aria-pressed', which === 'maker' ? 'true' : 'false');
     if (which === 'maker') { render(); drawAllCanvases(); }
+    if (which === 'people') buildPeople();
     window.scrollTo({ top: 0 });
   }
   $('navUpcoming').addEventListener('click', () => showView('upcoming'));
+  $('navPeople').addEventListener('click', () => showView('people'));
   $('navMaker').addEventListener('click', () => showView('maker'));
 
   // ---------- card rendering ----------
@@ -1272,6 +1311,7 @@
     state.stickers = seedStickers(occ);
     if (opts.name !== undefined) state.name = opts.name;
     state.sourceKey = opts.sourceKey || null;
+    if (opts.person){ state.personKey = opts.person.key; state.personName = opts.person.name; }
     selected = null;
     occasionExpanded = false;
     touch();
@@ -1315,8 +1355,20 @@
     nameIn.addEventListener('input', () => { state.name = nameIn.value; render(); touch(); });
     const msgIn = el('textarea', { id: 'msgInput' }); msgIn.value = state.message;
     msgIn.addEventListener('input', () => { state.message = msgIn.value; render(); touch(); });
-    const aboutIn = el('input', { type: 'text', id: 'aboutInput', value: state.about || '', autocomplete: 'off', placeholder: 'e.g. just ran her first marathon' });
-    aboutIn.addEventListener('input', () => { state.about = aboutIn.value; touch(); });
+    const person = state.personKey && people[state.personKey];
+    let aboutIn, aboutLabel;
+    if (person){
+      // Notes live on the person, not the card — that's what stops one card's context bleeding into the next.
+      aboutIn = el('textarea', { id: 'aboutInput', rows: '3', placeholder: 'Private notes about ' + person.name });
+      aboutIn.value = person.notes || '';
+      let t = null;
+      aboutIn.addEventListener('input', () => { person.notes = aboutIn.value; clearTimeout(t); t = setTimeout(() => savePerson(person), 400); });
+      aboutLabel = 'Notes about ' + person.name + ' (private · saved to their profile)';
+    } else {
+      aboutIn = el('input', { type: 'text', id: 'aboutInput', value: state.about || '', autocomplete: 'off', placeholder: 'e.g. just ran her first marathon' });
+      aboutIn.addEventListener('input', () => { state.about = aboutIn.value; touch(); });
+      aboutLabel = 'A line about them (or link this card to a person above)';
+    }
     const fromIn = el('input', { type: 'text', id: 'fromInput', value: state.from, autocomplete: 'off' });
     fromIn.addEventListener('input', () => { state.from = fromIn.value; render(); touch(); });
 
@@ -1324,7 +1376,7 @@
       el('div', { class: 'field' }, [el('label', { for: 'nameInput', text: 'Name' }), nameIn]),
       el('div', { class: 'field' }, [el('label', { for: 'msgInput', text: 'Message' }), msgIn]),
       el('div', { class: 'field' }, [
-        el('label', { for: 'aboutInput', text: 'A line about them (for Ask Claude)' }), aboutIn,
+        el('label', { for: 'aboutInput', text: aboutLabel }), aboutIn,
         el('div', { class: 'row', style: 'margin-top:4px' }, [el('button', { class: 'btn quiet', type: 'button', text: '✨ Ask Claude for a message', onclick: askClaude })])
       ]),
       el('div', { class: 'field' }, [el('label', { for: 'fromInput', text: 'From' }), fromIn]),
@@ -1369,7 +1421,7 @@
     if (!settings.apiKey){ showToast('Add an Anthropic API key in Settings to use this'); return; }
     const occ = currentOccasion();
     showToast('Asking Claude…');
-    const about = (state.about || '').trim();
+    const about = personNotes();
     const prompt = `Occasion: ${occ.label}. Recipient: ${state.name.trim() || 'a friend'}.` + (about ? ` About them: ${about}.` : '') +
       ' Write the message body only (2–3 sentences, warm and specific, no greeting line, no sign-off, no emoji).';
     try {
@@ -1401,7 +1453,7 @@
 
   async function autoDesign(btn){
     if (!settings.apiKey){ showToast('Add an Anthropic API key in Settings to use this'); return; }
-    const occ = currentOccasion(), about = (state.about || '').trim();
+    const occ = currentOccasion(), about = personNotes();
     const old = btn.textContent; btn.disabled = true; btn.textContent = 'Designing…';
     showToast('Asking Claude to design this card…');
     const paletteIds = PALETTES.map(p => p.id), layoutIds = LAYOUTS.map(l => l.id);
@@ -1616,7 +1668,7 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
 
   function buildAll(){
     buildOccasionPanel(); buildTextPanel(); buildStylePanel(); buildPhotoPanel(); buildStickersPanel(); buildLayoutPanel(); buildPalettePanel();
-    render(); renderSelBar();
+    render(); renderSelBar(); renderPersonPill();
   }
 
   $('newCardBtn').addEventListener('click', async () => {
@@ -1654,15 +1706,20 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
   // distinct from named drafts. Best-effort: a failure here must never block the actual send.
   async function archiveSent(via, blob){
     try {
-      const thumb = await thumbFromBlob(blob || lastBlob || await renderPng());
+      const file = blob || lastBlob || await renderPng();
+      const thumb = await thumbFromBlob(file);
       const occ = currentOccasion();
+      if (state.personKey && !people[state.personKey] && state.personName) ensurePerson(state.personName);
       const rec = Object.assign(cloneState(state), {
         id: 'sent' + Date.now() + Math.random().toString(36).slice(2, 6),
         sent: true, sentVia: via, sentAt: new Date().toISOString(),
-        title: occ.label + (state.name.trim() ? ' — ' + state.name.trim() : ''), thumb
+        title: occ.label + (state.name.trim() ? ' — ' + state.name.trim() : ''), thumb,
+        file, mime: file.type || 'image/png'   // the full-size export, so "Save to Drive" later needs no re-render
       });
       await DB.put(rec);
-    } catch (e) { console.error('archiveSent failed', e); }
+      if (exportState && exportState.blob === blob) exportState.rec = rec;
+      return rec;
+    } catch (e) { console.error('archiveSent failed', e); return null; }
   }
   $('saveDraftBtn').addEventListener('click', () => withBusy($('saveDraftBtn'), 'Saving…', async () => {
     const title = await promptSheet({ title: 'Save draft', label: 'Name this card', value: state.title || defaultTitle() });
@@ -1692,24 +1749,14 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     try { list = (await DB.all()).filter(d => d.id !== '__current__' && !!d.sent === wantSent).sort((a, b) => ((b.sentAt || b.savedAt || '')).localeCompare(a.sentAt || a.savedAt || '')); }
     catch (e) { grid.appendChild(el('p', { class: 'hint', text: 'Saved cards aren’t available in this browser (IndexedDB is off or blocked).' })); draftsOverlay.hidden = false; return; }
     if (!list.length) grid.appendChild(el('p', { class: 'hint', text: wantSent ? 'Cards you share, download or email will show up here automatically.' : 'No saved drafts yet. Build a card and tap Save.' }));
-    list.forEach(d => {
-      const card = el('div', { class: 'draft-card' });
-      if (d.thumb) card.appendChild(el('img', { src: d.thumb, alt: '' }));
-      const when = d.sent ? `Sent ${ago(d.sentAt)}${d.sentVia ? ' · ' + d.sentVia : ''}` : (d.savedAt ? 'Saved ' + ago(d.savedAt) : '');
-      card.appendChild(el('div', { class: 'meta' }, [el('b', { text: d.title || 'Untitled' }), el('div', { class: 'hint', text: when })]));
-      const btns = [toolBtn(d.sent ? 'Open a copy' : 'Open', () => { loadDraft(d, { copy: d.sent }); draftsOverlay.hidden = true; }, 'btn primary')];
-      if (!d.sent) btns.push(toolBtn('Copy', async () => { const copy = Object.assign({}, d, { id: 'd' + Date.now(), title: (d.title || 'Untitled') + ' copy', savedAt: new Date().toISOString() }); await DB.put(copy); openDrafts(); }));
-      btns.push(toolBtn('Delete', async () => { if (!await confirmSheet({ title: 'Delete this card?', message: (d.title || 'Untitled') + ' will be removed for good.', okText: 'Delete' })) return; await DB.del(d.id); if (state.id === d.id) state.id = null; openDrafts(); }, 'btn danger'));
-      card.appendChild(el('div', { class: 'row' }, btns));
-      grid.appendChild(card);
-    });
+    list.forEach(d => grid.appendChild(cardTile(d, openDrafts)));
     draftsOverlay.hidden = false;
   }
   function loadDraft(d, opts = {}){
     state = normalizeDraft(d);
     state.id = opts.copy ? null : d.id;
     state.title = opts.copy ? '' : (d.title || '');
-    delete state.sent; delete state.sentVia; delete state.sentAt;
+    delete state.sent; delete state.sentVia; delete state.sentAt; delete state.file; delete state.mime; delete state.driveId; delete state.driveLink;
     selected = null; resetHistory(); touch(); buildAll(); showView('maker');
     showToast(opts.copy ? 'Opened a copy of “' + (d.title || 'Untitled') + '”' : 'Opened “' + state.title + '”');
   }
@@ -1886,6 +1933,13 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     downloadBlob(exportState.blob, exportState.filename);
     markMade(); archiveSent(exportState.mime === 'image/gif' ? 'GIF' : 'Download', exportState.blob);
   });
+  $('exportDriveBtn').addEventListener('click', async () => {
+    if (!exportState) return;
+    const rec = exportState.rec || await archiveSent('Drive', exportState.blob);
+    if (!rec){ showToast('Couldn’t prepare the file'); return; }
+    exportState.rec = rec;
+    await saveToDrive(rec, $('exportDriveBtn'));
+  });
   $('gifBtn').addEventListener('click', () => withBusy($('gifBtn'), 'Making GIF…', async () => {
     const blob = await renderGif();
     if (!blob) return;
@@ -1968,7 +2022,7 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
   // localStorage forever and can't be fetched cross-origin from a static site anyway; GIS hands us
   // a scoped, read-only, one-hour token that only ever lives in memory.
   let token = null, tokenClient = null;
-  const SCOPE = 'https://www.googleapis.com/auth/calendar.readonly';
+  const SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/drive.file';
 
   function signIn(){
     if (!settings.clientId){ openSettings(); showToast('Paste your Google OAuth client ID first'); return; }
@@ -2119,12 +2173,14 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
   }
   async function rowMenu(it, occ){
     const items = [
+      { label: 'Notes & card history', value: 'person' },
       { label: 'Skip this one', value: 'once' },
       { label: `Don’t remind me about ${it.name}`, value: 'always' }
     ];
     if (it.source === 'manual') items.push({ label: 'Delete this occasion', value: 'delete', cls: 'danger' });
     const v = await menuSheet(it.name + ' · ' + occ.label, items);
     if (!v) return;
+    if (v === 'person'){ openPerson(pkey(it.name), it.name); return; }
     if (v === 'once') skipped[it.key] = { name: it.name, date: it.date, mode: 'once', at: new Date().toISOString() };
     else if (v === 'always') skipped[personKey(it)] = { name: it.name, mode: 'always', at: new Date().toISOString() };
     else if (v === 'delete'){
@@ -2198,12 +2254,12 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
       onclick: () => { if (made[it.key]) delete made[it.key]; else made[it.key] = { at: new Date().toISOString() }; Store.set('made', made); buildUpcoming(false); } });
     check.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
     const make = el('button', { class: 'btn ' + (isMade ? 'quiet' : 'primary'), type: 'button', text: isMade ? 'Again' : 'Make card',
-      onclick: () => { applyOccasion(occ, { name: it.name, sourceKey: it.key, resetMessage: true }); buildAll(); selectTab('Layout'); showView('maker'); } });
+      onclick: () => { applyOccasion(occ, { name: it.name, sourceKey: it.key, resetMessage: true, person: ensurePerson(it.name) }); buildAll(); selectTab('Layout'); showView('maker'); } });
     const more = el('button', { class: 'icon-btn on-paper', type: 'button', 'aria-label': 'More options for ' + it.name, text: '⋯', onclick: () => rowMenu(it, occ) });
     const actions = el('div', { class: 'occ-actions' }, [check, make, more]);
     return el('div', { class: 'occ-row' + (it.days === 0 ? ' today' : '') }, [
       el('div', { class: 'date-badge' }, [el('span', { text: parts.mon }), el('b', { text: String(parts.day) })]),
-      el('div', { class: 'occ-main' }, [el('div', { class: 'occ-name', text: it.name, title: it.title }), meta]),
+      el('div', { class: 'occ-main' }, [el('div', { class: 'occ-name' }, [el('button', { class: 'name-btn', type: 'button', text: it.name, title: 'Notes and card history for ' + it.name, onclick: () => openPerson(pkey(it.name), it.name) })]), meta]),
       actions
     ]);
   }
@@ -2223,6 +2279,226 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     showToast('Added ' + name);
   });
 
+  // ---------- people ----------
+  // The calendar is the trigger, but the durable thing is the person: private notes that carry
+  // context from year to year, and every card ever sent to them. Anyone seen on the calendar shows
+  // up here transiently; they become permanent the moment you write a note or send a card.
+  let people = Store.get('people', {});
+  const pkey = (name) => normName(name || '');
+  function ensurePerson(name){
+    const key = pkey(name); if (!key) return null;
+    if (!people[key]){
+      const now = new Date().toISOString();
+      people[key] = { key, name: String(name).trim(), notes: '', createdAt: now, updatedAt: now };
+      Store.set('people', people);
+    }
+    return people[key];
+  }
+  function savePerson(p){ p.updatedAt = new Date().toISOString(); people[p.key] = p; Store.set('people', people); }
+  const cardPersonKey = (d) => d.personKey || (d.name ? pkey(d.name) : null);
+  const personNotes = () => { const p = state.personKey && people[state.personKey]; return ((p ? p.notes : state.about) || '').trim().slice(0, 700); };
+
+  function personDates(key){
+    const seen = new Map();
+    const src = [...manual, ...((calCache && calCache.items) || [])];
+    src.filter(it => pkey(it.name) === key).forEach(it => {
+      const md = it.date.slice(5), k = it.occasionId + '|' + md;
+      if (!seen.has(k)) seen.set(k, { occasionId: it.occasionId, md, date: it.date });
+    });
+    return [...seen.values()].sort((a, b) => a.md.localeCompare(b.md));
+  }
+  function peopleIndex(){
+    const map = new Map();
+    Object.values(people).forEach(p => map.set(p.key, { key: p.key, name: p.name, saved: true, notes: p.notes || '', next: null }));
+    upcomingItems().forEach(it => {
+      const k = pkey(it.name); if (!k) return;
+      if (!map.has(k)) map.set(k, { key: k, name: it.name, saved: false, notes: '', next: null });
+      const e = map.get(k); if (!e.next || it.date < e.next.date) e.next = it;
+    });
+    return [...map.values()].filter(x => !skipped['person|' + x.key])
+      .sort((a, b) => (a.next ? a.next.date : '9').localeCompare(b.next ? b.next.date : '9') || a.name.localeCompare(b.name));
+  }
+
+  async function sentCardsFor(key){
+    try { return (await DB.all()).filter(d => d.id !== '__current__' && d.sent && cardPersonKey(d) === key).sort((a, b) => (b.sentAt || '').localeCompare(a.sentAt || '')); }
+    catch (e) { return []; }
+  }
+
+  async function buildPeople(){
+    const list = $('peopleList'); list.textContent = '';
+    const idx = peopleIndex();
+    const counts = {};
+    try { (await DB.all()).forEach(d => { if (d.id === '__current__' || !d.sent) return; const k = cardPersonKey(d); if (k) counts[k] = (counts[k] || 0) + 1; }); } catch (e) { /* no IndexedDB */ }
+    $('peopleHint').textContent = idx.length
+      ? 'Tap a person for private notes and every card you’ve sent them. Notes feed Auto-design and Ask Claude, so each year’s card can build on the last.'
+      : 'People show up here from your calendar scan, or add one below.';
+    idx.forEach(x => {
+      const initials = x.name.split(/\s+/).map(w => w[0] || '').join('').slice(0, 2).toUpperCase() || '?';
+      let nextText = 'No upcoming dates';
+      if (x.next){ const occ = byId(OCCASIONS, x.next.occasionId) || byId(OCCASIONS, 'congrats'); const parts = AZ.parts(x.next.date); nextText = occ.label + ' · ' + parts.mon + ' ' + parts.day; }
+      const meta = el('div', { class: 'occ-meta' }, [
+        el('span', { text: nextText }),
+        counts[x.key] ? el('span', { class: 'pill', text: counts[x.key] + (counts[x.key] === 1 ? ' card' : ' cards') }) : null,
+        x.notes ? el('span', { class: 'pill', text: 'Notes' }) : null
+      ]);
+      list.appendChild(el('button', { class: 'occ-row person-row', type: 'button', onclick: () => openPerson(x.key, x.name) }, [
+        el('div', { class: 'initials', text: initials }),
+        el('div', { class: 'occ-main' }, [el('div', { class: 'occ-name', text: x.name }), meta, x.notes ? el('div', { class: 'notes-preview', text: x.notes }) : null])
+      ]));
+    });
+    if (!idx.length) list.appendChild(el('div', { class: 'empty' }, [el('h3', { text: 'No people yet' })]));
+  }
+  $('addPersonBtn').addEventListener('click', () => {
+    const name = $('newPersonName').value.trim();
+    if (!name){ showToast('Add a name'); $('newPersonName').focus(); return; }
+    const p = ensurePerson(name); $('newPersonName').value = ''; $('addPerson').open = false;
+    buildPeople(); openPerson(p.key);
+  });
+
+  const personOverlay = $('personOverlay');
+  $('closePerson').addEventListener('click', () => personOverlay.hidden = true);
+  personOverlay.addEventListener('click', (e) => { if (e.target === personOverlay) personOverlay.hidden = true; });
+
+  async function openPerson(key, fallbackName){
+    const p = people[key] || (fallbackName ? ensurePerson(fallbackName) : null);
+    if (!p) return;
+    const body = $('personBody'); body.textContent = '';
+    $('personTitle').textContent = p.name;
+
+    const nameIn = el('input', { type: 'text', id: 'personNameInput', value: p.name, autocomplete: 'off' });
+    nameIn.addEventListener('change', () => { const v = nameIn.value.trim(); if (!v) return; p.name = v; savePerson(p); $('personTitle').textContent = v; buildPeople(); buildUpcoming(false); renderPersonPill(); });
+
+    const notes = el('textarea', { id: 'personNotes', rows: '5', placeholder: 'Inside jokes, what they love, what you gave last year, this year’s big thing…' });
+    notes.value = p.notes || '';
+    let t = null;
+    notes.addEventListener('input', () => { p.notes = notes.value; clearTimeout(t); t = setTimeout(() => { savePerson(p); buildPeople(); }, 400); });
+
+    const dates = personDates(key);
+    const dateRow = el('div', { class: 'person-dates' }, dates.map(d => {
+      const occ = byId(OCCASIONS, d.occasionId) || byId(OCCASIONS, 'congrats'); const parts = AZ.parts(d.date);
+      return el('span', { class: 'pill', text: occ.label + ' · ' + parts.mon + ' ' + parts.day });
+    }));
+
+    const cards = await sentCardsFor(key);
+    const grid = el('div', { class: 'drafts-grid' });
+    cards.forEach(d => grid.appendChild(cardTile(d, () => openPerson(key))));
+
+    const next = upcomingItems().find(i => pkey(i.name) === key) || null;
+    const skipKey = 'person|' + key, isSk = !!skipped[skipKey];
+    body.append(
+      el('div', { class: 'field' }, [el('label', { for: 'personNameInput', text: 'Name' }), nameIn]),
+      el('div', { class: 'field' }, [el('label', { for: 'personNotes', text: 'Private notes' }), notes,
+        el('p', { class: 'hint', text: 'Stays on this phone. Auto-design and Ask Claude read these, so the card can mention what actually matters to them.' })]),
+      lbl('Dates', 'margin:4px 0 8px'),
+      dates.length ? dateRow : el('p', { class: 'hint', text: 'No dates yet — they appear from your calendar, or add one under Upcoming.' }),
+      lbl('Cards sent (' + cards.length + ')'),
+      cards.length ? grid : el('p', { class: 'hint', text: 'Nothing yet. Every card you share, download or email for ' + p.name + ' lands here.' }),
+      el('div', { class: 'row', style: 'margin-top:14px' }, [
+        toolBtn('Make a card', () => startCardFor(p, next), 'btn primary'),
+        toolBtn(isSk ? 'Unskip' : 'Skip this person', () => {
+          if (isSk) delete skipped[skipKey]; else skipped[skipKey] = { name: p.name, mode: 'always', at: new Date().toISOString() };
+          Store.set('skipped', skipped); buildUpcoming(false); buildPeople(); openPerson(key);
+        })
+      ])
+    );
+    personOverlay.hidden = false;
+  }
+
+  function startCardFor(p, next){
+    const firstDate = personDates(p.key)[0];
+    const occ = byId(OCCASIONS, next ? next.occasionId : (firstDate ? firstDate.occasionId : 'birthday')) || byId(OCCASIONS, 'birthday');
+    applyOccasion(occ, { name: p.name, sourceKey: next ? next.key : null, resetMessage: true, person: p });
+    personOverlay.hidden = true; draftsOverlay.hidden = true;
+    buildAll(); selectTab('Layout'); showView('maker');
+  }
+
+  // "For Kat ›" in the editor: the one place that shows which person this card belongs to.
+  function renderPersonPill(){
+    const b = $('personPill');
+    const p = state.personKey && people[state.personKey];
+    b.textContent = p ? 'For ' + p.name + ' ›' : 'Link to a person';
+    b.classList.toggle('primary', !!p);
+  }
+  $('personPill').addEventListener('click', async () => {
+    const p = state.personKey && people[state.personKey];
+    if (p) return openPerson(p.key);
+    const idx = peopleIndex();
+    if (!idx.length){ showToast('No people yet — they appear from your calendar, or add one under People'); return; }
+    const v = await menuSheet('Who is this card for?', idx.slice(0, 14).map(x => ({ label: x.name, value: x.key })));
+    if (!v) return;
+    const person = people[v] || ensurePerson(idx.find(x => x.key === v).name);
+    state.personKey = person.key; state.personName = person.name;
+    if (!state.name.trim()) state.name = person.name;
+    touch(); buildAll();
+  });
+
+  // One tile for drafts, sent cards and a person's history.
+  function cardTile(d, onChange){
+    const card = el('div', { class: 'draft-card' });
+    if (d.thumb) card.appendChild(el('img', { src: d.thumb, alt: '' }));
+    const who = cardPersonKey(d) && people[cardPersonKey(d)] ? ' · for ' + people[cardPersonKey(d)].name : '';
+    const when = d.sent ? 'Sent ' + ago(d.sentAt) + (d.sentVia ? ' · ' + d.sentVia : '') : (d.savedAt ? 'Saved ' + ago(d.savedAt) : '');
+    card.appendChild(el('div', { class: 'meta' }, [el('b', { text: d.title || 'Untitled' }), el('div', { class: 'hint', text: when + who })]));
+    const btns = [toolBtn(d.sent ? 'Open a copy' : 'Open', () => { loadDraft(d, { copy: d.sent }); draftsOverlay.hidden = true; personOverlay.hidden = true; }, 'btn primary')];
+    if (!d.sent) btns.push(toolBtn('Copy', async () => { const copy = Object.assign({}, d, { id: 'd' + Date.now(), title: (d.title || 'Untitled') + ' copy', savedAt: new Date().toISOString() }); await DB.put(copy); onChange(); }));
+    if (d.sent && d.driveLink) btns.push(el('a', { class: 'btn quiet', href: d.driveLink, target: '_blank', rel: 'noopener', text: 'In Drive ↗' }));
+    else if (d.sent && d.file) btns.push(toolBtn('Save to Drive', (e) => saveToDrive(d, e.currentTarget).then(onChange)));
+    btns.push(toolBtn('Delete', async () => { if (!await confirmSheet({ title: 'Delete this card?', message: (d.title || 'Untitled') + ' will be removed for good.', okText: 'Delete' })) return; await DB.del(d.id); if (state.id === d.id) state.id = null; onChange(); }, 'btn danger'));
+    card.appendChild(el('div', { class: 'row' }, btns));
+    return card;
+  }
+
+  // ---------- Google Drive ----------
+  // drive.file is the narrow scope: the app can only see files it created itself, in a
+  // "Celebrate" folder it makes on first save. This is the one path where a card image leaves the
+  // phone, and only on an explicit tap.
+  let driveFolderId = null;
+  async function driveFetch(url, opts = {}){
+    const r = await fetch(url, Object.assign({}, opts, { headers: Object.assign({ Authorization: 'Bearer ' + token }, opts.headers || {}) }));
+    if (r.status === 401){ token = null; throw new Error('AUTH'); }
+    if (r.status === 403) throw new Error('FORBIDDEN');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }
+  async function driveFolder(){
+    if (driveFolderId) return driveFolderId;
+    const q = encodeURIComponent("name='Celebrate' and mimeType='application/vnd.google-apps.folder' and trashed=false");
+    const found = await driveFetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id)&spaces=drive');
+    if (found.files && found.files.length){ driveFolderId = found.files[0].id; return driveFolderId; }
+    const made = await driveFetch('https://www.googleapis.com/drive/v3/files?fields=id', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Celebrate', mimeType: 'application/vnd.google-apps.folder' }) });
+    driveFolderId = made.id;
+    return driveFolderId;
+  }
+  async function driveUpload(blob, filename){
+    const folder = await driveFolder();
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify({ name: filename, parents: [folder] })], { type: 'application/json' }));
+    form.append('file', blob, filename);
+    return driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink', { method: 'POST', body: form });
+  }
+  function driveName(rec, mime){
+    const occ = byId(OCCASIONS, rec.occasionId) || OCCASIONS[0];
+    const ext = mime === 'image/gif' ? 'gif' : 'png';
+    return 'Celebrate — ' + (rec.name && rec.name.trim() ? rec.name.trim() : 'card') + ' — ' + occ.label + ' — ' + (rec.sentAt || new Date().toISOString()).slice(0, 10) + '.' + ext;
+  }
+  async function saveToDrive(rec, btn){
+    if (!token){ showToast('Sign in with Google first — the same sign-in now covers Drive'); signIn(); return; }
+    const blob = rec.file || (exportState && exportState.blob);
+    if (!blob){ showToast('This card was archived before Drive support — open a copy and export it again'); return; }
+    await withBusy(btn, 'Saving…', async () => {
+      try {
+        const res = await driveUpload(blob, driveName(rec, blob.type));
+        rec.driveId = res.id; rec.driveLink = res.webViewLink;
+        await DB.put(rec);
+        showToast('Saved to Google Drive › Celebrate');
+      } catch (e) {
+        if (e.message === 'AUTH') showToast('Google session expired — sign in again');
+        else if (e.message === 'FORBIDDEN') showToast('Drive said no — enable the Google Drive API in your Cloud project, then sign out and back in to grant Drive access', 7000);
+        else throw e;
+      }
+    });
+  }
+
   // ---------- init ----------
   async function init(){
     try { const cur = await DB.get('__current__'); if (cur){ state = normalizeDraft(cur); state.id = cur.draftId || null; } }
@@ -2232,7 +2508,7 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
   buildAll(); buildUpcoming(); showView('upcoming'); init();
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') buildUpcoming(); });
 
-  window.__celebrate = { state: () => state, upcomingItems, extractName, matchKeyword, PALETTES, OCCASIONS, DB, undo, redo, skipped: () => skipped };
+  window.__celebrate = { state: () => state, upcomingItems, extractName, matchKeyword, PALETTES, OCCASIONS, DB, undo, redo, skipped: () => skipped, people: () => people, openPerson, setToken: (t) => { token = t; } };
 })();
 </script>
 </body>

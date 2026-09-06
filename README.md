@@ -28,6 +28,16 @@ the rest never sneak up on you. Single `index.html`, no build step, deployed on 
   what actually went out.
 - **Choose your calendars** — Settings lists every calendar from your last scan with checkboxes;
   by default only calendars you keep visible in Google Calendar (plus Birthdays) are scanned.
+- **People** — the durable layer under the calendar. Everyone seen on the calendar gets a
+  person card (tap a name on Upcoming, or open the People tab): private notes that carry context
+  from year to year, their known dates, and every card ever sent to them. A card you start from a
+  person stays linked to them ("For Kat ›" in the editor), Auto-design and Ask Claude read that
+  person's notes, and each share/download/email lands in their history. Skipping a person hides
+  them everywhere.
+- **Save to Google Drive** — on any sent card (person history, Drafts → Sent, or the export
+  preview). The same Google sign-in now asks for `drive.file`, the narrowest Drive scope: the app
+  can only see files it created itself, in a "Celebrate" folder it makes on first save. The Drive
+  API must be enabled on the same Cloud project as the Calendar API.
 
 ## Setup
 
@@ -39,8 +49,10 @@ the rest never sneak up on you. Single `index.html`, no build step, deployed on 
 ## Privacy
 
 Everything stays in the browser: photos are never uploaded, calendar data is display-only and
-cached locally, saved drafts live in this browser's IndexedDB, and the Google token is never
-written to disk. No backend, no secrets in code.
+cached locally, people notes and saved drafts live in this browser's storage, and the Google
+token is never written to disk. No backend, no secrets in code. The one exception is explicit:
+tapping "Save to Drive" uploads that finished card image to your own Google Drive, and nothing
+else — notes never leave the phone.
 
 ## Local testing
 
