@@ -15,9 +15,15 @@ the rest never sneak up on you. Single `index.html`, no build step, deployed on 
   full-bleed masks (drag to pan, pinch to zoom) plus filters and borders, solid / gradient / pattern /
   photo backgrounds, frames, 16 original SVG stickers (resize, rotate, flip, layer), free-floating
   text blocks, a Style tab (12 Google Fonts across display / body / handwriting roles, size sliders,
-  alignment, text color), undo/redo, named saved drafts with thumbnails, and a live preview.
+  alignment, text position/spacing, and auto-shrink-to-fit for long messages), undo/redo, named
+  saved drafts with thumbnails, and a live preview that stays pinned in view while you scroll the
+  editor below it.
 - **Share** — 1080×1350 PNG (1080×1080 square, 1600×900 landscape) via the Web Share API on
   phones, with Download / Copy message / Email-HTML fallbacks. Optional "Ask Claude" for a draft.
+  Every share, download or email auto-archives a snapshot under Drafts → Sent, so you always have
+  a record of what actually went out.
+- **Choose your calendars** — Settings lists every calendar from your last scan with checkboxes;
+  by default only calendars you keep visible in Google Calendar (plus Birthdays) are scanned.
 
 ## Setup
 

@@ -80,9 +80,10 @@
   .icon-btn.on-paper{ background:transparent; border-color:var(--paper-edge); color:var(--ink); }
 
   main{ display:grid; gap:18px; grid-template-columns:1fr; }
-  @media (min-width:860px){ main.maker{ grid-template-columns:420px 1fr; align-items:start; } .stage{ position:sticky; top:14px; } }
+  @media (min-width:860px){ main.maker{ grid-template-columns:420px 1fr; align-items:start; } }
 
-  .stage{ background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.16); border-radius:22px; padding:16px; }
+  .stage{ background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.16); border-radius:22px; padding:16px;
+    position:sticky; top:max(10px, env(safe-area-inset-top)); z-index:5; }
   .stage-frame{ display:flex; justify-content:center; width:100%; }
   .card-canvas{ position:relative; width:min(100%, 340px); aspect-ratio:4/5; border-radius:14px; overflow:hidden; container-type:inline-size;
     box-shadow:0 18px 34px rgba(0,0,0,.35); --f-display:'Baloo 2', sans-serif; --f-body:'Plus Jakarta Sans', sans-serif; --f-hand:'Caveat', cursive; }
@@ -491,7 +492,11 @@
 <div class="overlay" id="draftsOverlay" hidden>
   <div class="sheet" role="dialog" aria-label="Saved drafts" aria-modal="true" style="max-width:560px">
     <div class="close-row"><button class="icon-btn on-paper" id="closeDrafts" aria-label="Close" type="button">✕</button></div>
-    <h3>Saved drafts</h3>
+    <h3>Your cards</h3>
+    <div class="segmented" id="draftsTabs" style="margin-bottom:12px">
+      <button type="button" id="draftsTabMine" aria-pressed="true">Drafts</button>
+      <button type="button" id="draftsTabSent" aria-pressed="false">Sent</button>
+    </div>
     <div class="drafts-grid" id="draftsGrid"></div>
   </div>
 </div>
@@ -533,7 +538,7 @@
 <script>
 (function(){
   'use strict';
-  const APP_VERSION = '1.1.1';
+  const APP_VERSION = '1.2.0';
 
   // ---------- helpers ----------
   function el(tag, attrs, kids){
@@ -1526,13 +1531,27 @@
     });
   }
   const defaultTitle = () => `${currentOccasion().label}${state.name.trim() ? ' — ' + state.name.trim() : ''}`;
-  async function makeThumb(){
-    const blob = await renderPng();
+  async function thumbFromBlob(blob){
     const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(blob); });
     const c = document.createElement('canvas'); const w = 240; c.width = w; c.height = Math.round(w * img.naturalHeight / img.naturalWidth);
     c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
     URL.revokeObjectURL(img.src);
     return c.toDataURL('image/jpeg', .7);
+  }
+  async function makeThumb(){ return thumbFromBlob(await renderPng()); }
+  // Every share/download/email auto-archives a snapshot — a lightweight, always-on "sent" log
+  // distinct from named drafts. Best-effort: a failure here must never block the actual send.
+  async function archiveSent(via, blob){
+    try {
+      const thumb = await thumbFromBlob(blob || lastBlob || await renderPng());
+      const occ = currentOccasion();
+      const rec = Object.assign(cloneState(state), {
+        id: 'sent' + Date.now() + Math.random().toString(36).slice(2, 6),
+        sent: true, sentVia: via, sentAt: new Date().toISOString(),
+        title: occ.label + (state.name.trim() ? ' — ' + state.name.trim() : ''), thumb
+      });
+      await DB.put(rec);
+    } catch (e) { console.error('archiveSent failed', e); }
   }
   $('saveDraftBtn').addEventListener('click', () => withBusy($('saveDraftBtn'), 'Saving…', async () => {
     const title = await promptSheet({ title: 'Save draft', label: 'Name this card', value: state.title || defaultTitle() });
@@ -1545,32 +1564,43 @@
     showToast('Saved “' + state.title + '”');
   }));
   const draftsOverlay = $('draftsOverlay');
-  $('draftsBtn').addEventListener('click', openDrafts);
+  let draftsTab = 'mine';
+  function syncDraftsTabs(){
+    $('draftsTabMine').setAttribute('aria-pressed', draftsTab === 'mine' ? 'true' : 'false');
+    $('draftsTabSent').setAttribute('aria-pressed', draftsTab === 'sent' ? 'true' : 'false');
+  }
+  $('draftsTabMine').addEventListener('click', () => { draftsTab = 'mine'; openDrafts(); });
+  $('draftsTabSent').addEventListener('click', () => { draftsTab = 'sent'; openDrafts(); });
+  $('draftsBtn').addEventListener('click', () => { draftsTab = 'mine'; openDrafts(); });
   $('closeDrafts').addEventListener('click', () => draftsOverlay.hidden = true);
   draftsOverlay.addEventListener('click', (e) => { if (e.target === draftsOverlay) draftsOverlay.hidden = true; });
   async function openDrafts(){
-    const grid = $('draftsGrid'); grid.textContent = '';
+    const grid = $('draftsGrid'); grid.textContent = ''; syncDraftsTabs();
+    const wantSent = draftsTab === 'sent';
     let list = [];
-    try { list = (await DB.all()).filter(d => d.id !== '__current__').sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || '')); }
-    catch (e) { grid.appendChild(el('p', { class: 'hint', text: 'Saved drafts aren’t available in this browser (IndexedDB is off or blocked).' })); draftsOverlay.hidden = false; return; }
-    if (!list.length) grid.appendChild(el('p', { class: 'hint', text: 'No saved drafts yet. Build a card and tap Save.' }));
+    try { list = (await DB.all()).filter(d => d.id !== '__current__' && !!d.sent === wantSent).sort((a, b) => ((b.sentAt || b.savedAt || '')).localeCompare(a.sentAt || a.savedAt || '')); }
+    catch (e) { grid.appendChild(el('p', { class: 'hint', text: 'Saved cards aren’t available in this browser (IndexedDB is off or blocked).' })); draftsOverlay.hidden = false; return; }
+    if (!list.length) grid.appendChild(el('p', { class: 'hint', text: wantSent ? 'Cards you share, download or email will show up here automatically.' : 'No saved drafts yet. Build a card and tap Save.' }));
     list.forEach(d => {
       const card = el('div', { class: 'draft-card' });
       if (d.thumb) card.appendChild(el('img', { src: d.thumb, alt: '' }));
-      card.appendChild(el('div', { class: 'meta' }, [el('b', { text: d.title || 'Untitled' }), el('div', { class: 'hint', text: d.savedAt ? 'Saved ' + ago(d.savedAt) : '' })]));
-      card.appendChild(el('div', { class: 'row' }, [
-        toolBtn('Open', () => { loadDraft(d); draftsOverlay.hidden = true; }, 'btn primary'),
-        toolBtn('Copy', async () => { const copy = Object.assign({}, d, { id: 'd' + Date.now(), title: (d.title || 'Untitled') + ' copy', savedAt: new Date().toISOString() }); await DB.put(copy); openDrafts(); }),
-        toolBtn('Delete', async () => { if (!await confirmSheet({ title: 'Delete this draft?', message: (d.title || 'Untitled') + ' will be removed for good.', okText: 'Delete' })) return; await DB.del(d.id); if (state.id === d.id) state.id = null; openDrafts(); }, 'btn danger')
-      ]));
+      const when = d.sent ? `Sent ${ago(d.sentAt)}${d.sentVia ? ' · ' + d.sentVia : ''}` : (d.savedAt ? 'Saved ' + ago(d.savedAt) : '');
+      card.appendChild(el('div', { class: 'meta' }, [el('b', { text: d.title || 'Untitled' }), el('div', { class: 'hint', text: when })]));
+      const btns = [toolBtn(d.sent ? 'Open a copy' : 'Open', () => { loadDraft(d, { copy: d.sent }); draftsOverlay.hidden = true; }, 'btn primary')];
+      if (!d.sent) btns.push(toolBtn('Copy', async () => { const copy = Object.assign({}, d, { id: 'd' + Date.now(), title: (d.title || 'Untitled') + ' copy', savedAt: new Date().toISOString() }); await DB.put(copy); openDrafts(); }));
+      btns.push(toolBtn('Delete', async () => { if (!await confirmSheet({ title: 'Delete this card?', message: (d.title || 'Untitled') + ' will be removed for good.', okText: 'Delete' })) return; await DB.del(d.id); if (state.id === d.id) state.id = null; openDrafts(); }, 'btn danger'));
+      card.appendChild(el('div', { class: 'row' }, btns));
       grid.appendChild(card);
     });
     draftsOverlay.hidden = false;
   }
-  function loadDraft(d){
-    state = normalizeDraft(d); state.id = d.id; state.title = d.title || '';
+  function loadDraft(d, opts = {}){
+    state = normalizeDraft(d);
+    state.id = opts.copy ? null : d.id;
+    state.title = opts.copy ? '' : (d.title || '');
+    delete state.sent; delete state.sentVia; delete state.sentAt;
     selected = null; resetHistory(); touch(); buildAll(); showView('maker');
-    showToast('Opened “' + state.title + '”');
+    showToast(opts.copy ? 'Opened a copy of “' + (d.title || 'Untitled') + '”' : 'Opened “' + state.title + '”');
   }
 
   // ---------- export / share ----------
@@ -1642,7 +1672,7 @@
     await withBusy(btn, 'Preparing…', async () => {
       const blob = await ensureBlob();
       const r = await shareBlob(blob);
-      if (r === 'shared') { showToast('Shared'); markMade(); }
+      if (r === 'shared') { showToast('Shared'); markMade(); archiveSent('Share', blob); }
       else if (r === 'unsupported') { showToast('Sharing files isn’t available here — use Download or Copy message'); $('exportImg').src = URL.createObjectURL(blob); $('exportNote').textContent = 'Long-press the image to save it.'; exportOverlay.hidden = false; }
       else if (r === 'blocked') { $('exportImg').src = URL.createObjectURL(blob); $('exportNote').textContent = 'Card is ready — tap Share once more to open the share sheet.'; exportOverlay.hidden = false; }
     });
@@ -1654,7 +1684,7 @@
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob); a.download = 'celebrate-card.png';
     document.body.appendChild(a); a.click(); a.remove();
-    markMade();
+    markMade(); archiveSent('Download', blob);
   }
   $('downloadBtn').addEventListener('click', () => withBusy($('downloadBtn'), 'Rendering…', async () => downloadBlob(await ensureBlob())));
   $('exportDownloadBtn').addEventListener('click', () => { if (lastBlob) downloadBlob(lastBlob); });
@@ -1680,7 +1710,8 @@
     const item = { 'text/plain': htmlP.then(h => new Blob([h], { type: 'text/plain' })) };
     if (typeof ClipboardItem !== 'undefined' && ClipboardItem.supports?.('text/html') !== false) item['text/html'] = htmlP.then(h => new Blob([h], { type: 'text/html' }));
     const write = (typeof ClipboardItem !== 'undefined') ? navigator.clipboard.write([new ClipboardItem(item)]) : htmlP.then(h => navigator.clipboard.writeText(h));
-    write.then(() => { showToast('Email HTML copied — in Gmail, start a new message and paste', 4500); markMade(); })
+    htmlP.then(() => {}).catch(() => {});
+    write.then(() => { showToast('Email HTML copied — in Gmail, start a new message and paste', 4500); markMade(); ensureBlob().then(b => archiveSent('Email', b)); })
       .catch(() => showToast('Couldn’t copy the email — try Share to Mail instead'));
   });
 
