@@ -30,10 +30,22 @@ the rest never sneak up on you. Single `index.html`, no build step, deployed on 
   by default only calendars you keep visible in Google Calendar (plus Birthdays) are scanned.
 - **People** — the durable layer under the calendar. Everyone seen on the calendar gets a
   person card (tap a name on Upcoming, or open the People tab): private notes that carry context
-  from year to year, their known dates, and every card ever sent to them. A card you start from a
-  person stays linked to them ("For Kat ›" in the editor), Auto-design and Ask Claude read that
-  person's notes, and each share/download/email lands in their history. Skipping a person hides
-  them everywhere.
+  from year to year, their known dates, their drafts, and every card ever sent to them. A card you
+  start from a person stays linked to them ("For Kat ›" in the editor), Auto-design and Ask Claude
+  read that person's notes, and each share/download/email lands in their history. The People tab
+  sorts by Soon / A–Z / birthday Month and has a search box. Dates you add on a person get an
+  "Add to Google Calendar" link (a prefilled new-event page, so the app never needs calendar
+  write access).
+- **One rule for who counts** — "Remove from Celebrate…" on a person (or from a row's ⋯ menu on
+  Upcoming) marks them *not a person* (a trip, a holiday), *no cards needed*, or *duplicate of
+  someone else*. Removed people vanish from Upcoming, People and the editor, and can be restored
+  under People › Removed. Merging a duplicate moves their notes and cards to the other person and
+  remembers the alias, so future calendar rows under either name land on one person.
+- **Upcoming is the hub** — each row shows that person's drafts and past cards; the check opens
+  their cards, and "Make card" continues the latest draft or starts a new one.
+- **Backup** — Settings › Your data exports a restorable JSON backup (people, notes, dates, card
+  history with thumbnails; no photos or full-size images), a plain-text version of the notes, or
+  saves the backup straight to Drive. Restore merges: newer notes win, nothing is deleted.
 - **Save to Google Drive** — on any sent card (person history, Drafts → Sent, or the export
   preview). The same Google sign-in now asks for `drive.file`, the narrowest Drive scope: the app
   can only see files it created itself, in a "Celebrate" folder it makes on first save. The Drive

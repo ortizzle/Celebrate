@@ -316,6 +316,8 @@
   .initials{ width:52px; height:52px; border-radius:14px; background:var(--accent-2); color:#3a2a00; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:1.2rem; display:flex; align-items:center; justify-content:center; }
   .notes-preview{ font-size:.82rem; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
   .person-dates{ display:flex; flex-wrap:wrap; gap:6px; }
+  .people-tools{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+  .people-tools input[type="search"]{ flex:1 1 150px; min-height:48px; border:1px solid var(--paper-edge); border-radius:12px; padding:0 14px; font:inherit; background:var(--paper); color:var(--ink); }
   .name-btn{ background:none; border:none; padding:0; min-height:48px; font:inherit; font-weight:700; font-size:1rem; color:var(--ink); text-align:left; cursor:pointer;
     text-decoration:underline dotted; text-underline-offset:3px; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block; }
   .sheet .field textarea{ min-height:110px; }
@@ -414,8 +416,21 @@
   <main id="viewPeople" hidden>
     <section class="panel-card" aria-label="People">
       <div class="panel-head"><h2>People</h2></div>
+      <div class="people-tools">
+        <div class="segmented" role="group" aria-label="Sort people">
+          <button type="button" id="peopleTab_soon" aria-pressed="true">Soon</button>
+          <button type="button" id="peopleTab_az" aria-pressed="false">A–Z</button>
+          <button type="button" id="peopleTab_month" aria-pressed="false">Month</button>
+        </div>
+        <input type="search" id="peopleSearch" placeholder="Find a name or note" aria-label="Find a person" autocomplete="off">
+      </div>
       <p class="hint" id="peopleHint" style="margin-bottom:12px"></p>
       <div id="peopleList" class="occ-list"></div>
+      <details class="add-occ" id="removedBox" hidden>
+        <summary id="removedSummary">Removed</summary>
+        <p class="hint" style="margin-top:4px">Hidden everywhere — Upcoming, People and the editor. Restore any time.</p>
+        <div id="removedList" style="margin-top:6px"></div>
+      </details>
       <details class="add-occ" id="addPerson">
         <summary>Add a person</summary>
         <div class="field" style="margin-top:8px">
@@ -509,6 +524,17 @@
       <input type="password" id="apiKeyInput" autocomplete="off" spellcheck="false" placeholder="sk-ant-…">
       <p class="hint">Lets “Ask Claude” draft a message. Stored only in this browser.</p>
     </div>
+    <div class="field">
+      <span class="lbl">Your data</span>
+      <p class="hint" style="margin-bottom:8px">People, notes, dates and card history live only in this browser. Back them up so they survive a new phone.</p>
+      <div class="row">
+        <button class="btn quiet" id="exportJsonBtn" type="button">Export backup</button>
+        <button class="btn quiet" id="exportTextBtn" type="button">Notes as text</button>
+        <button class="btn quiet" id="exportDriveBackupBtn" type="button">Backup to Drive</button>
+        <button class="btn quiet" id="importBtn" type="button">Restore a backup</button>
+        <input type="file" id="importFile" accept="application/json,.json" hidden>
+      </div>
+    </div>
     <div class="row">
       <button class="btn primary" id="saveSettingsBtn" type="button">Save</button>
       <button class="btn quiet" id="signOutBtn" type="button">Sign out of Google</button>
@@ -589,7 +615,7 @@
 <script>
 (function(){
   'use strict';
-  const APP_VERSION = '1.4.0';
+  const APP_VERSION = '1.5.0';
 
   // ---------- helpers ----------
   function el(tag, attrs, kids){
@@ -842,10 +868,11 @@
         t.onerror = () => rej(t.error);
       });
     },
-    put(v){ return this.tx('readwrite', s => s.put(v)); },
+    onChange: null,
+    put(v){ return this.tx('readwrite', s => s.put(v)).then(r => { if (v && v.id !== '__current__' && this.onChange) this.onChange(); return r; }); },
     get(id){ return this.tx('readonly', s => s.get(id)); },
     all(){ return this.tx('readonly', s => s.getAll()); },
-    del(id){ return this.tx('readwrite', s => s.delete(id)); }
+    del(id){ return this.tx('readwrite', s => s.delete(id)).then(r => { if (this.onChange) this.onChange(); return r; }); }
   };
 
   let saveTimer = null;
@@ -916,6 +943,7 @@
     $('navMaker').setAttribute('aria-pressed', which === 'maker' ? 'true' : 'false');
     if (which === 'maker') { render(); drawAllCanvases(); }
     if (which === 'people') buildPeople();
+    if (which === 'upcoming') buildUpcoming(false);
     window.scrollTo({ top: 0 });
   }
   $('navUpcoming').addEventListener('click', () => showView('upcoming'));
@@ -1892,10 +1920,12 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     markMade();
   }));
 
-  async function shareBlob(blob, filename, mime){
+  async function shareBlob(blob, filename, mime, text){
     const file = new File([blob], filename, { type: mime });
     if (!(navigator.canShare && navigator.canShare({ files: [file] }))) return 'unsupported';
-    try { await navigator.share({ files: [file], text: fullText() }); return 'shared'; }
+    const payload = { files: [file] };
+    if (text !== '') payload.text = text || fullText();
+    try { await navigator.share(payload); return 'shared'; }
     catch (e) { return e && e.name === 'AbortError' ? 'cancelled' : 'blocked'; }
   }
   async function doShare(btn){
@@ -2149,8 +2179,9 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
   function upcomingItems(){
     const merged = new Map();
     // Dedupe on name + date: the same birthday usually sits on both our calendars.
-    for (const it of [...manualOccurrences(), ...((calCache && calCache.items) || [])]){
-      const key = normName(it.name) + '|' + it.date;
+    for (const raw of [...manualOccurrences(), ...((calCache && calCache.items) || [])]){
+      const it = Object.assign({}, raw, { name: displayName(raw.name), rawName: raw.name });
+      const key = pkey(it.name) + '|' + it.date;
       const prev = merged.get(key);
       if (!prev) merged.set(key, Object.assign({ key, calendars: [it.calendar] }, it));
       else if (!prev.calendars.includes(it.calendar)) prev.calendars.push(it.calendar);
@@ -2158,7 +2189,7 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     return [...merged.values()].sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
   }
 
-  const personKey = (it) => 'person|' + normName(it.name);
+  const personKey = (it) => 'person|' + pkey(it.name);
   const isSkipped = (it) => !!(skipped[it.key] || skipped[personKey(it)]);
   function menuSheet(title, items){
     return new Promise(resolve => {
@@ -2172,24 +2203,27 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     });
   }
   async function rowMenu(it, occ){
+    const done = !!made[it.key];
     const items = [
-      { label: 'Notes & card history', value: 'person' },
+      { label: 'Notes, drafts & card history', value: 'person' },
+      { label: done ? 'Unmark “done”' : 'Mark done without a card', value: 'done' },
       { label: 'Skip this one', value: 'once' },
-      { label: `Don’t remind me about ${it.name}`, value: 'always' }
+      { label: `Remove ${it.name} from Celebrate…`, value: 'remove' }
     ];
     if (it.source === 'manual') items.push({ label: 'Delete this occasion', value: 'delete', cls: 'danger' });
     const v = await menuSheet(it.name + ' · ' + occ.label, items);
     if (!v) return;
     if (v === 'person'){ openPerson(pkey(it.name), it.name); return; }
+    if (v === 'remove'){ removePersonMenu(pkey(it.name), it.name); return; }
+    if (v === 'done'){ if (done) delete made[it.key]; else made[it.key] = { at: new Date().toISOString() }; Store.set('made', made); buildUpcoming(false); return; }
     if (v === 'once') skipped[it.key] = { name: it.name, date: it.date, mode: 'once', at: new Date().toISOString() };
-    else if (v === 'always') skipped[personKey(it)] = { name: it.name, mode: 'always', at: new Date().toISOString() };
     else if (v === 'delete'){
       if (!await confirmSheet({ title: 'Delete this occasion?', message: `${it.name} — ${occ.label}, ${AZ.pretty(it.date)}.`, okText: 'Delete' })) return;
       manual = manual.filter(m => m.id !== it.manualId); Store.set('manual', manual);
     }
     Store.set('skipped', skipped);
     buildUpcoming(false);
-    if (v !== 'delete') showToast(v === 'once' ? 'Skipped — undo under “Skipped” at the bottom' : `Won’t remind you about ${it.name}`);
+    if (v === 'once') showToast('Skipped — undo under “Skipped” at the bottom');
   }
   function buildSkippedBox(hiddenRows){
     const box = $('skippedBox'), list = $('skippedList'); list.textContent = '';
@@ -2202,12 +2236,12 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     hiddenRows.forEach(r => {
       const key = skipped[r.key] ? r.key : personKey(r);
       list.appendChild(el('div', { class: 'skip-row' }, [
-        el('span', { text: `${r.name} · ${AZ.pretty(r.date)}${skipped[r.key] ? '' : ' · every year'}` }),
-        toolBtn('Unskip', () => unskip(key))
+        el('span', { text: `${r.name} · ${AZ.pretty(r.date)}${skipped[r.key] ? '' : ' · removed'}` }),
+        toolBtn(skipped[r.key] ? 'Unskip' : 'Restore', () => unskip(key))
       ]));
     });
     always.filter(([k]) => !hiddenRows.some(r => personKey(r) === k)).forEach(([k, v]) => {
-      list.appendChild(el('div', { class: 'skip-row' }, [el('span', { text: `${v.name} · every year` }), toolBtn('Unskip', () => unskip(k))]));
+      list.appendChild(el('div', { class: 'skip-row' }, [el('span', { text: `${v.name} · removed` }), toolBtn('Restore', () => unskip(k))]));
     });
   }
 
@@ -2241,20 +2275,25 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
 
   function occasionRow(it){
     const occ = byId(OCCASIONS, it.occasionId) || byId(OCCASIONS, 'congrats');
-    const isMade = !!made[it.key];
+    const pk = pkey(it.name), cards = cardsFor(pk);
+    // "Made" for this occurrence: a card actually sent from this row, or marked done by hand.
+    const isMade = !!made[it.key] || cards.sent.some(c => c.sourceKey === it.key);
     const parts = AZ.parts(it.date);
     const when = it.days === 0 ? 'Today' : it.days === 1 ? 'Tomorrow' : `in ${it.days} days`;
     const meta = el('div', { class: 'occ-meta' }, [
       el('span', { text: `${occ.label} · ${parts.wd} · ${when}` }),
-      isMade ? el('span', { class: 'pill made', text: 'Card made' }) : null,
+      isMade ? el('span', { class: 'pill made', text: 'Card sent' }) : null,
+      cards.drafts.length ? el('span', { class: 'pill', text: cards.drafts.length + (cards.drafts.length === 1 ? ' draft' : ' drafts') }) : null,
+      cards.sent.length ? el('span', { class: 'pill', text: cards.sent.length + (cards.sent.length === 1 ? ' past card' : ' past cards') }) : null,
       it.calendars.length > 1 ? el('span', { class: 'pill', text: `${it.calendars.length} calendars` }) : null,
       it.source === 'manual' ? el('span', { class: 'pill', text: 'Added by you' }) : null
     ]);
-    const check = el('button', { class: 'check-btn', type: 'button', 'aria-pressed': isMade ? 'true' : 'false', 'aria-label': isMade ? 'Mark card as not made' : 'Mark card as made',
-      onclick: () => { if (made[it.key]) delete made[it.key]; else made[it.key] = { at: new Date().toISOString() }; Store.set('made', made); buildUpcoming(false); } });
+    // The check is a door, not a toggle: it opens this person's drafts and past cards.
+    const check = el('button', { class: 'check-btn', type: 'button', 'aria-pressed': isMade ? 'true' : 'false', 'aria-label': 'Cards for ' + it.name,
+      onclick: () => openPerson(pk, it.name, { focus: 'cards' }) });
     check.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-    const make = el('button', { class: 'btn ' + (isMade ? 'quiet' : 'primary'), type: 'button', text: isMade ? 'Again' : 'Make card',
-      onclick: () => { applyOccasion(occ, { name: it.name, sourceKey: it.key, resetMessage: true, person: ensurePerson(it.name) }); buildAll(); selectTab('Layout'); showView('maker'); } });
+    const make = el('button', { class: 'btn ' + (isMade ? 'quiet' : 'primary'), type: 'button', text: cards.drafts.length ? 'Continue' : (isMade ? 'Again' : 'Make card'),
+      onclick: () => makeCardFrom(it, occ) });
     const more = el('button', { class: 'icon-btn on-paper', type: 'button', 'aria-label': 'More options for ' + it.name, text: '⋯', onclick: () => rowMenu(it, occ) });
     const actions = el('div', { class: 'occ-actions' }, [check, make, more]);
     return el('div', { class: 'occ-row' + (it.days === 0 ? ' today' : '') }, [
@@ -2283,8 +2322,13 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
   // The calendar is the trigger, but the durable thing is the person: private notes that carry
   // context from year to year, and every card ever sent to them. Anyone seen on the calendar shows
   // up here transiently; they become permanent the moment you write a note or send a card.
+  // One rule, kept on the person, decides visibility everywhere: removed (not a person, no cards
+  // wanted) or merged into someone else (duplicate) — Upcoming and People both read it.
   let people = Store.get('people', {});
-  const pkey = (name) => normName(name || '');
+  let aliases = Store.get('aliases', {});   // raw name key → canonical person key, set by "duplicate of…"
+  const rawKey = (name) => normName(String(name || ''));
+  const pkey = (name) => { const k = rawKey(name); return aliases[k] || k; };
+  const displayName = (name) => { const p = people[pkey(name)]; return p ? p.name : name; };
   function ensurePerson(name){
     const key = pkey(name); if (!key) return null;
     if (!people[key]){
@@ -2295,19 +2339,21 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     return people[key];
   }
   function savePerson(p){ p.updatedAt = new Date().toISOString(); people[p.key] = p; Store.set('people', people); }
-  const cardPersonKey = (d) => d.personKey || (d.name ? pkey(d.name) : null);
+  const cardPersonKey = (d) => (d.personKey ? (aliases[d.personKey] || d.personKey) : (d.name ? pkey(d.name) : null));
   const personNotes = () => { const p = state.personKey && people[state.personKey]; return ((p ? p.notes : state.about) || '').trim().slice(0, 700); };
+  const removedKey = (key) => 'person|' + key;
+  const isRemoved = (key) => !!skipped[removedKey(key)];
 
   function personDates(key){
     const seen = new Map();
     const src = [...manual, ...((calCache && calCache.items) || [])];
     src.filter(it => pkey(it.name) === key).forEach(it => {
       const md = it.date.slice(5), k = it.occasionId + '|' + md;
-      if (!seen.has(k)) seen.set(k, { occasionId: it.occasionId, md, date: it.date });
+      if (!seen.has(k)) seen.set(k, { occasionId: it.occasionId, md, date: it.date, manualId: it.id || null, source: it.id ? 'manual' : 'calendar' });
     });
     return [...seen.values()].sort((a, b) => a.md.localeCompare(b.md));
   }
-  function peopleIndex(){
+  function peopleIndex(opts = {}){
     const map = new Map();
     Object.values(people).forEach(p => map.set(p.key, { key: p.key, name: p.name, saved: true, notes: p.notes || '', next: null }));
     upcomingItems().forEach(it => {
@@ -2315,43 +2361,168 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
       if (!map.has(k)) map.set(k, { key: k, name: it.name, saved: false, notes: '', next: null });
       const e = map.get(k); if (!e.next || it.date < e.next.date) e.next = it;
     });
-    return [...map.values()].filter(x => !skipped['person|' + x.key])
+    return [...map.values()].filter(x => opts.includeRemoved || !isRemoved(x.key))
       .sort((a, b) => (a.next ? a.next.date : '9').localeCompare(b.next ? b.next.date : '9') || a.name.localeCompare(b.name));
   }
 
-  async function sentCardsFor(key){
-    try { return (await DB.all()).filter(d => d.id !== '__current__' && d.sent && cardPersonKey(d) === key).sort((a, b) => (b.sentAt || '').localeCompare(a.sentAt || '')); }
+  // Cards per person, kept in memory so Upcoming rows can show drafts/sent without an async
+  // IndexedDB read per row. Refreshed after every draft write.
+  let cardIndex = {};
+  async function refreshCardIndex(){
+    const idx = {};
+    try {
+      (await DB.all()).forEach(d => {
+        if (d.id === '__current__') return;
+        const k = cardPersonKey(d); if (!k) return;
+        const e = idx[k] || (idx[k] = { drafts: [], sent: [] });
+        (d.sent ? e.sent : e.drafts).push({ id: d.id, title: d.title || 'Untitled', sourceKey: d.sourceKey || null, sentAt: d.sentAt || null, savedAt: d.savedAt || null, occasionId: d.occasionId });
+      });
+    } catch (e) { /* no IndexedDB */ }
+    Object.values(idx).forEach(e => { e.drafts.sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || '')); e.sent.sort((a, b) => (b.sentAt || '').localeCompare(a.sentAt || '')); });
+    cardIndex = idx;
+    return idx;
+  }
+  const cardsFor = (key) => cardIndex[key] || { drafts: [], sent: [] };
+  DB.onChange = () => { refreshCardIndex().then(() => { if (!$('viewUpcoming').hidden) buildUpcoming(false); }); };
+
+  async function cardsOf(key){
+    try { return (await DB.all()).filter(d => d.id !== '__current__' && cardPersonKey(d) === key); }
     catch (e) { return []; }
   }
 
+  // ----- remove / merge (the one rule) -----
+  const REMOVE_REASONS = { notperson: 'Not a person', nocards: 'No cards needed', always: 'Removed' };
+  async function removePersonMenu(key, name){
+    const others = peopleIndex().filter(x => x.key !== key);
+    const items = [
+      { label: 'Not a person — a trip, holiday or event', value: 'notperson' },
+      { label: 'Duplicate of someone else…', value: 'dup' },
+      { label: 'Don’t need cards for ' + name, value: 'nocards' }
+    ];
+    if (!others.length) items.splice(1, 1);
+    const v = await menuSheet('Remove ' + name + ' from Celebrate', items);
+    if (!v) return false;
+    if (v === 'dup'){
+      const into = await menuSheet(name + ' is the same person as…', others.slice(0, 30).map(x => ({ label: x.name, value: x.key })));
+      if (!into) return false;
+      const target = people[into] || ensurePerson(others.find(x => x.key === into).name);
+      await mergePerson(key, target.key);
+      showToast('Merged into ' + target.name + ' — notes and cards moved over');
+    } else {
+      skipped[removedKey(key)] = { name, mode: 'always', reason: v, at: new Date().toISOString() };
+      Store.set('skipped', skipped);
+      showToast(v === 'notperson' ? name + ' won’t show up anywhere — undo under People › Removed' : 'Removed ' + name + ' — undo under People › Removed');
+    }
+    personOverlay.hidden = true;
+    buildUpcoming(false); buildPeople(); renderPersonPill();
+    return true;
+  }
+  function restorePerson(key){
+    delete skipped[removedKey(key)]; Store.set('skipped', skipped);
+    buildUpcoming(false); buildPeople();
+  }
+  async function mergePerson(fromKey, intoKey){
+    if (fromKey === intoKey) return;
+    const from = people[fromKey], into = people[intoKey] || ensurePerson(intoKey);
+    if (from && from.notes && from.notes.trim()){
+      into.notes = (into.notes || '').trim();
+      into.notes = (into.notes ? into.notes + '\n\n' : '') + '(from ' + from.name + ') ' + from.notes.trim();
+    }
+    into.aliases = [...new Set([...(into.aliases || []), fromKey, ...((from && from.aliases) || [])])];
+    savePerson(into);
+    delete people[fromKey]; Store.set('people', people);
+    Object.keys(aliases).forEach(k => { if (aliases[k] === fromKey) aliases[k] = intoKey; });
+    aliases[fromKey] = intoKey; Store.set('aliases', aliases);
+    delete skipped[removedKey(fromKey)]; Store.set('skipped', skipped);
+    try {
+      const recs = (await DB.all()).filter(d => d.id !== '__current__' && d.personKey === fromKey);
+      for (const r of recs){ r.personKey = intoKey; r.personName = into.name; await DB.put(r); }
+    } catch (e) { /* no IndexedDB */ }
+    if (state.personKey === fromKey){ state.personKey = intoKey; state.personName = into.name; touch(); }
+    await refreshCardIndex();
+  }
+
+  // ----- People view -----
+  let peopleView = Store.get('peopleView', 'soon'), peopleQuery = '';
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function personRow(x){
+    const initials = x.name.split(/\s+/).map(w => w[0] || '').join('').slice(0, 2).toUpperCase() || '?';
+    const c = cardsFor(x.key);
+    let nextText = 'No upcoming dates';
+    if (x.next){ const occ = byId(OCCASIONS, x.next.occasionId) || byId(OCCASIONS, 'congrats'); const parts = AZ.parts(x.next.date); nextText = occ.label + ' · ' + parts.mon + ' ' + parts.day; }
+    else { const d = personDates(x.key)[0]; if (d){ const occ = byId(OCCASIONS, d.occasionId) || byId(OCCASIONS, 'congrats'); const parts = AZ.parts(d.date); nextText = occ.label + ' · ' + parts.mon + ' ' + parts.day; } }
+    const meta = el('div', { class: 'occ-meta' }, [
+      el('span', { text: nextText }),
+      c.sent.length ? el('span', { class: 'pill', text: c.sent.length + (c.sent.length === 1 ? ' card' : ' cards') }) : null,
+      c.drafts.length ? el('span', { class: 'pill', text: c.drafts.length + (c.drafts.length === 1 ? ' draft' : ' drafts') }) : null,
+      x.notes ? el('span', { class: 'pill', text: 'Notes' }) : null
+    ]);
+    return el('button', { class: 'occ-row person-row', type: 'button', onclick: () => openPerson(x.key, x.name) }, [
+      el('div', { class: 'initials', text: initials }),
+      el('div', { class: 'occ-main' }, [el('div', { class: 'occ-name', text: x.name }), meta, x.notes ? el('div', { class: 'notes-preview', text: x.notes }) : null])
+    ]);
+  }
+  function birthMonth(key){
+    const ds = personDates(key); if (!ds.length) return null;
+    const b = ds.find(d => d.occasionId === 'birthday') || ds[0];
+    return Number(b.md.slice(0, 2)) - 1;
+  }
+  function syncPeopleTabs(){ ['soon', 'az', 'month'].forEach(v => $('peopleTab_' + v).setAttribute('aria-pressed', peopleView === v ? 'true' : 'false')); }
+  ['soon', 'az', 'month'].forEach(v => $('peopleTab_' + v).addEventListener('click', () => { peopleView = v; Store.set('peopleView', v); buildPeople(); }));
+  $('peopleSearch').addEventListener('input', () => { peopleQuery = $('peopleSearch').value.trim().toLowerCase(); buildPeople(); });
   async function buildPeople(){
-    const list = $('peopleList'); list.textContent = '';
-    const idx = peopleIndex();
-    const counts = {};
-    try { (await DB.all()).forEach(d => { if (d.id === '__current__' || !d.sent) return; const k = cardPersonKey(d); if (k) counts[k] = (counts[k] || 0) + 1; }); } catch (e) { /* no IndexedDB */ }
+    const list = $('peopleList'); list.textContent = ''; syncPeopleTabs();
+    await refreshCardIndex();
+    let idx = peopleIndex();
+    if (peopleQuery) idx = idx.filter(x => x.name.toLowerCase().includes(peopleQuery) || (x.notes || '').toLowerCase().includes(peopleQuery));
     $('peopleHint').textContent = idx.length
-      ? 'Tap a person for private notes and every card you’ve sent them. Notes feed Auto-design and Ask Claude, so each year’s card can build on the last.'
-      : 'People show up here from your calendar scan, or add one below.';
-    idx.forEach(x => {
-      const initials = x.name.split(/\s+/).map(w => w[0] || '').join('').slice(0, 2).toUpperCase() || '?';
-      let nextText = 'No upcoming dates';
-      if (x.next){ const occ = byId(OCCASIONS, x.next.occasionId) || byId(OCCASIONS, 'congrats'); const parts = AZ.parts(x.next.date); nextText = occ.label + ' · ' + parts.mon + ' ' + parts.day; }
-      const meta = el('div', { class: 'occ-meta' }, [
-        el('span', { text: nextText }),
-        counts[x.key] ? el('span', { class: 'pill', text: counts[x.key] + (counts[x.key] === 1 ? ' card' : ' cards') }) : null,
-        x.notes ? el('span', { class: 'pill', text: 'Notes' }) : null
-      ]);
-      list.appendChild(el('button', { class: 'occ-row person-row', type: 'button', onclick: () => openPerson(x.key, x.name) }, [
-        el('div', { class: 'initials', text: initials }),
-        el('div', { class: 'occ-main' }, [el('div', { class: 'occ-name', text: x.name }), meta, x.notes ? el('div', { class: 'notes-preview', text: x.notes }) : null])
+      ? 'Tap a person for private notes, their dates, drafts and every card you’ve sent them.'
+      : (peopleQuery ? 'No one matches “' + peopleQuery + '”.' : 'People show up here from your calendar scan, or add one below.');
+    if (peopleView === 'az'){
+      idx.sort((a, b) => a.name.localeCompare(b.name));
+      let letter = '';
+      idx.forEach(x => {
+        const L = (x.name[0] || '#').toUpperCase();
+        if (L !== letter){ letter = L; list.appendChild(el('div', { class: 'group-title', text: L })); }
+        list.appendChild(personRow(x));
+      });
+    } else if (peopleView === 'month'){
+      const groups = MONTHS.map(() => []), none = [];
+      idx.forEach(x => { const m = birthMonth(x.key); if (m === null) none.push(x); else groups[m].push(x); });
+      const thisMonth = Number(AZ.today().slice(5, 7)) - 1;
+      for (let i = 0; i < 12; i++){
+        const m = (thisMonth + i) % 12; if (!groups[m].length) continue;
+        groups[m].sort((a, b) => a.name.localeCompare(b.name));
+        list.appendChild(el('div', { class: 'group-title' }, [el('span', { text: MONTHS[m] }), el('small', { text: groups[m].length + (groups[m].length === 1 ? ' person' : ' people') })]));
+        groups[m].forEach(x => list.appendChild(personRow(x)));
+      }
+      if (none.length){
+        list.appendChild(el('div', { class: 'group-title' }, [el('span', { text: 'No date yet' })]));
+        none.sort((a, b) => a.name.localeCompare(b.name)).forEach(x => list.appendChild(personRow(x)));
+      }
+    } else idx.forEach(x => list.appendChild(personRow(x)));
+    if (!idx.length) list.appendChild(el('div', { class: 'empty' }, [el('h3', { text: peopleQuery ? 'No matches' : 'No people yet' })]));
+    buildRemovedBox();
+  }
+  function buildRemovedBox(){
+    const box = $('removedBox'), rl = $('removedList'); rl.textContent = '';
+    const rows = Object.entries(skipped).filter(([k]) => k.startsWith('person|'));
+    box.hidden = !rows.length;
+    if (box.hidden) return;
+    $('removedSummary').textContent = 'Removed (' + rows.length + ')';
+    rows.forEach(([k, v]) => {
+      const key = k.slice(7);
+      rl.appendChild(el('div', { class: 'skip-row' }, [
+        el('span', { text: (v.name || key) + ' · ' + (REMOVE_REASONS[v.reason] || REMOVE_REASONS.always).toLowerCase() }),
+        toolBtn('Restore', () => restorePerson(key))
       ]));
     });
-    if (!idx.length) list.appendChild(el('div', { class: 'empty' }, [el('h3', { text: 'No people yet' })]));
   }
   $('addPersonBtn').addEventListener('click', () => {
     const name = $('newPersonName').value.trim();
     if (!name){ showToast('Add a name'); $('newPersonName').focus(); return; }
     const p = ensurePerson(name); $('newPersonName').value = ''; $('addPerson').open = false;
+    if (isRemoved(p.key)) restorePerson(p.key);
     buildPeople(); openPerson(p.key);
   });
 
@@ -2359,7 +2530,40 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
   $('closePerson').addEventListener('click', () => personOverlay.hidden = true);
   personOverlay.addEventListener('click', (e) => { if (e.target === personOverlay) personOverlay.hidden = true; });
 
-  async function openPerson(key, fallbackName){
+  // A prefilled Google Calendar "new event" link — adds the date back to the calendar without
+  // asking for calendar write access; Google's own screen does the saving.
+  function calendarLink(name, occ, date, yearly){
+    const ymd = date.replace(/-/g, ''), next = AZ.addDays(date, 1).replace(/-/g, '');
+    const title = name + '’s ' + occ.label.toLowerCase();
+    const q = 'action=TEMPLATE&text=' + encodeURIComponent(title) + '&dates=' + ymd + '/' + next + (yearly ? '&recur=' + encodeURIComponent('RRULE:FREQ=YEARLY') : '') + '&details=' + encodeURIComponent('Added from Celebrate');
+    return 'https://calendar.google.com/calendar/render?' + q;
+  }
+  function addDateForm(p, onDone){
+    const occSel = el('select', { id: 'pdOcc' });
+    OCCASIONS.forEach(o => occSel.appendChild(el('option', { value: o.id, text: o.label })));
+    const dateIn = el('input', { type: 'date', id: 'pdDate' });
+    const yearly = el('input', { type: 'checkbox', id: 'pdYearly' }); yearly.checked = true;
+    const add = toolBtn('Add date', () => {
+      const date = dateIn.value;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)){ showToast('Pick a date'); dateIn.focus(); return; }
+      manual.push({ id: 'm' + Date.now(), name: p.name, occasionId: occSel.value, date, yearly: yearly.checked, createdAt: new Date().toISOString() });
+      Store.set('manual', manual);
+      buildUpcoming(false); onDone();
+    }, 'btn primary');
+    return el('details', { class: 'add-occ', style: 'margin-top:8px; border-top:none; padding-top:0' }, [
+      el('summary', { text: 'Add a date' }),
+      el('div', { class: 'row', style: 'align-items:flex-start; margin-top:6px' }, [
+        el('div', { class: 'field', style: 'flex:1 1 140px' }, [el('label', { for: 'pdOcc', text: 'Occasion' }), occSel]),
+        el('div', { class: 'field', style: 'flex:1 1 140px' }, [el('label', { for: 'pdDate', text: 'Date' }), dateIn])
+      ]),
+      el('label', { class: 'chk' }, [yearly, el('span', { text: 'Repeats every year' })]),
+      el('div', { class: 'row' }, [add]),
+      el('p', { class: 'hint', text: 'Dates you add here get an “Add to Google Calendar” link so your calendar stays the source of truth.' })
+    ]);
+  }
+
+  async function openPerson(key, fallbackName, opts = {}){
+    key = aliases[key] || key;
     const p = people[key] || (fallbackName ? ensurePerson(fallbackName) : null);
     if (!p) return;
     const body = $('personBody'); body.textContent = '';
@@ -2374,53 +2578,88 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     notes.addEventListener('input', () => { p.notes = notes.value; clearTimeout(t); t = setTimeout(() => { savePerson(p); buildPeople(); }, 400); });
 
     const dates = personDates(key);
-    const dateRow = el('div', { class: 'person-dates' }, dates.map(d => {
+    const dateList = el('div', {}, dates.map(d => {
       const occ = byId(OCCASIONS, d.occasionId) || byId(OCCASIONS, 'congrats'); const parts = AZ.parts(d.date);
-      return el('span', { class: 'pill', text: occ.label + ' · ' + parts.mon + ' ' + parts.day });
+      const m = d.manualId ? manual.find(x => x.id === d.manualId) : null;
+      const kids = [el('span', { text: occ.label + ' · ' + parts.mon + ' ' + parts.day + (m ? '' : ' · from your calendar') })];
+      if (m) kids.push(el('div', { class: 'row', style: 'gap:6px' }, [
+        el('a', { class: 'btn quiet', href: calendarLink(p.name, occ, m.date, m.yearly), target: '_blank', rel: 'noopener', text: 'Add to Google Calendar ↗' }),
+        toolBtn('Remove', async () => { if (!await confirmSheet({ title: 'Remove this date?', message: occ.label + ', ' + AZ.pretty(m.date) + '.', okText: 'Remove' })) return; manual = manual.filter(x => x.id !== m.id); Store.set('manual', manual); buildUpcoming(false); openPerson(key); })
+      ]));
+      return el('div', { class: 'skip-row', style: 'flex-wrap:wrap' }, kids);
     }));
 
-    const cards = await sentCardsFor(key);
-    const grid = el('div', { class: 'drafts-grid' });
-    cards.forEach(d => grid.appendChild(cardTile(d, () => openPerson(key))));
+    const all = await cardsOf(key);
+    const drafts = all.filter(d => !d.sent).sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || ''));
+    const sent = all.filter(d => d.sent).sort((a, b) => (b.sentAt || '').localeCompare(a.sentAt || ''));
+    const draftGrid = el('div', { class: 'drafts-grid' }); drafts.forEach(d => draftGrid.appendChild(cardTile(d, () => openPerson(key))));
+    const sentGrid = el('div', { class: 'drafts-grid' }); sent.forEach(d => sentGrid.appendChild(cardTile(d, () => openPerson(key))));
 
     const next = upcomingItems().find(i => pkey(i.name) === key) || null;
-    const skipKey = 'person|' + key, isSk = !!skipped[skipKey];
+    const removed = isRemoved(key);
+    const cardsLbl = lbl('Cards');
     body.append(
+      el('div', { class: 'row', style: 'margin-bottom:12px' }, [
+        toolBtn('Make a new card', () => startCardFor(p, next), 'btn primary'),
+        drafts.length ? toolBtn('Continue “' + (drafts[0].title || 'Untitled') + '”', () => { loadDraft(drafts[0]); personOverlay.hidden = true; }) : null
+      ]),
       el('div', { class: 'field' }, [el('label', { for: 'personNameInput', text: 'Name' }), nameIn]),
       el('div', { class: 'field' }, [el('label', { for: 'personNotes', text: 'Private notes' }), notes,
         el('p', { class: 'hint', text: 'Stays on this phone. Auto-design and Ask Claude read these, so the card can mention what actually matters to them.' })]),
-      lbl('Dates', 'margin:4px 0 8px'),
-      dates.length ? dateRow : el('p', { class: 'hint', text: 'No dates yet — they appear from your calendar, or add one under Upcoming.' }),
-      lbl('Cards sent (' + cards.length + ')'),
-      cards.length ? grid : el('p', { class: 'hint', text: 'Nothing yet. Every card you share, download or email for ' + p.name + ' lands here.' }),
-      el('div', { class: 'row', style: 'margin-top:14px' }, [
-        toolBtn('Make a card', () => startCardFor(p, next), 'btn primary'),
-        toolBtn(isSk ? 'Unskip' : 'Skip this person', () => {
-          if (isSk) delete skipped[skipKey]; else skipped[skipKey] = { name: p.name, mode: 'always', at: new Date().toISOString() };
-          Store.set('skipped', skipped); buildUpcoming(false); buildPeople(); openPerson(key);
-        })
+      lbl('Dates', 'margin:4px 0 4px'),
+      dates.length ? dateList : el('p', { class: 'hint', text: 'No dates yet — they appear from your calendar, or add one here.' }),
+      addDateForm(p, () => openPerson(key)),
+      cardsLbl,
+      lbl('Drafts (' + drafts.length + ')', 'margin:6px 0 8px; font-weight:600'),
+      drafts.length ? draftGrid : el('p', { class: 'hint', text: 'No drafts. Save one from the editor and it lives here.' }),
+      lbl('Sent (' + sent.length + ')', 'margin:12px 0 8px; font-weight:600'),
+      sent.length ? sentGrid : el('p', { class: 'hint', text: 'Nothing yet. Every card you share, download or email for ' + p.name + ' lands here.' }),
+      el('div', { class: 'row', style: 'margin-top:18px' }, [
+        removed ? toolBtn('Restore ' + p.name, () => { restorePerson(key); openPerson(key); })
+                : toolBtn('Remove from Celebrate…', () => removePersonMenu(key, p.name))
       ])
     );
     personOverlay.hidden = false;
+    if (opts.focus === 'cards') requestAnimationFrame(() => cardsLbl.scrollIntoView({ block: 'start', behavior: 'smooth' }));
   }
 
   function startCardFor(p, next){
     const firstDate = personDates(p.key)[0];
     const occ = byId(OCCASIONS, next ? next.occasionId : (firstDate ? firstDate.occasionId : 'birthday')) || byId(OCCASIONS, 'birthday');
+    if (state.id || state.photos.some(Boolean) || (state.message && state.message.trim() && state.message !== state.lastAutoMessage)){
+      // Don't quietly overwrite an unsaved card — the in-progress one becomes its own draft.
+      state.id = state.id || 'd' + Date.now();
+      DB.put(Object.assign(cloneState(state), { title: state.title || defaultTitle(), savedAt: new Date().toISOString() })).catch(() => {});
+    }
+    imgCache.clear(); filteredCache.clear();
+    state = defaultDraft(); selected = null;
     applyOccasion(occ, { name: p.name, sourceKey: next ? next.key : null, resetMessage: true, person: p });
     personOverlay.hidden = true; draftsOverlay.hidden = true;
-    buildAll(); selectTab('Layout'); showView('maker');
+    resetHistory(); buildAll(); selectTab('Layout'); showView('maker');
+  }
+  // From an Upcoming row: continue the latest draft for that person, or start a fresh card.
+  async function makeCardFrom(it, occ){
+    const p = ensurePerson(it.name);
+    const c = cardsFor(p.key);
+    if (c.drafts.length){
+      const items = c.drafts.slice(0, 4).map(d => ({ label: 'Continue “' + d.title + '”', value: d.id }));
+      items.push({ label: 'Start a new card', value: '__new__', cls: 'primary' });
+      const v = await menuSheet('Card for ' + p.name, items);
+      if (!v) return;
+      if (v !== '__new__'){ const d = await DB.get(v); if (d){ loadDraft(d); return; } }
+    }
+    startCardFor(p, it);
   }
 
   // "For Kat ›" in the editor: the one place that shows which person this card belongs to.
   function renderPersonPill(){
     const b = $('personPill');
-    const p = state.personKey && people[state.personKey];
+    const p = state.personKey && people[aliases[state.personKey] || state.personKey];
     b.textContent = p ? 'For ' + p.name + ' ›' : 'Link to a person';
     b.classList.toggle('primary', !!p);
   }
   $('personPill').addEventListener('click', async () => {
-    const p = state.personKey && people[state.personKey];
+    const p = state.personKey && people[aliases[state.personKey] || state.personKey];
     if (p) return openPerson(p.key);
     const idx = peopleIndex();
     if (!idx.length){ showToast('No people yet — they appear from your calendar, or add one under People'); return; }
@@ -2436,7 +2675,8 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
   function cardTile(d, onChange){
     const card = el('div', { class: 'draft-card' });
     if (d.thumb) card.appendChild(el('img', { src: d.thumb, alt: '' }));
-    const who = cardPersonKey(d) && people[cardPersonKey(d)] ? ' · for ' + people[cardPersonKey(d)].name : '';
+    const pk = cardPersonKey(d);
+    const who = pk && people[pk] ? ' · for ' + people[pk].name : '';
     const when = d.sent ? 'Sent ' + ago(d.sentAt) + (d.sentVia ? ' · ' + d.sentVia : '') : (d.savedAt ? 'Saved ' + ago(d.savedAt) : '');
     card.appendChild(el('div', { class: 'meta' }, [el('b', { text: d.title || 'Untitled' }), el('div', { class: 'hint', text: when + who })]));
     const btns = [toolBtn(d.sent ? 'Open a copy' : 'Open', () => { loadDraft(d, { copy: d.sent }); draftsOverlay.hidden = true; personOverlay.hidden = true; }, 'btn primary')];
@@ -2447,6 +2687,81 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     card.appendChild(el('div', { class: 'row' }, btns));
     return card;
   }
+
+  // ---------- backup / export ----------
+  // Notes are the most personal thing in here, so they need a way out that doesn't depend on
+  // this phone: a restorable JSON backup and a plain-text version you can read anywhere.
+  // Full-size card images stay out (they go to Drive); thumbnails come along.
+  async function backupData(){
+    let cards = [];
+    try { cards = (await DB.all()).filter(d => d.id !== '__current__').map(d => { const c = Object.assign({}, d); delete c.file; delete c.mime; delete c.photos; if (c.background && c.background.photo){ c.background = Object.assign({}, c.background, { photo: null }); } return c; }); }
+    catch (e) { /* no IndexedDB */ }
+    return { app: 'celebrate', version: APP_VERSION, exportedAt: new Date().toISOString(), people, aliases, skipped, manual, made,
+      settings: { keywords: settings.keywords, from: settings.from, calendars: settings.calendars }, cards };
+  }
+  function notesText(){
+    const lines = ['Celebrate — people & notes', 'Exported ' + new Date().toLocaleString(), ''];
+    peopleIndex().sort((a, b) => a.name.localeCompare(b.name)).forEach(x => {
+      lines.push('== ' + x.name + ' ==');
+      const ds = personDates(x.key);
+      if (ds.length) lines.push('Dates: ' + ds.map(d => { const occ = byId(OCCASIONS, d.occasionId) || byId(OCCASIONS, 'congrats'); const parts = AZ.parts(d.date); return occ.label + ' ' + parts.mon + ' ' + parts.day; }).join(', '));
+      const c = cardsFor(x.key);
+      if (c.sent.length) lines.push('Cards sent: ' + c.sent.map(s => s.title + ' (' + (s.sentAt || '').slice(0, 10) + ')').join('; '));
+      if (x.notes) lines.push('', x.notes.trim());
+      lines.push('');
+    });
+    return lines.join('\n');
+  }
+  async function exportFile(blob, filename){
+    const r = await shareBlob(blob, filename, blob.type);
+    if (r === 'shared'){ showToast('Shared ' + filename); return; }
+    if (r === 'cancelled') return;
+    downloadBlob(blob, filename);
+    showToast('Downloaded ' + filename);
+  }
+  const stamp = () => AZ.today();
+  $('exportJsonBtn').addEventListener('click', () => withBusy($('exportJsonBtn'), 'Packing…', async () => {
+    const data = await backupData();
+    await exportFile(new Blob([JSON.stringify(data)], { type: 'application/json' }), 'celebrate-backup-' + stamp() + '.json');
+  }));
+  $('exportTextBtn').addEventListener('click', () => withBusy($('exportTextBtn'), 'Writing…', async () => {
+    await refreshCardIndex();
+    await exportFile(new Blob([notesText()], { type: 'text/plain' }), 'celebrate-notes-' + stamp() + '.txt');
+  }));
+  $('exportDriveBackupBtn').addEventListener('click', () => withBusy($('exportDriveBackupBtn'), 'Saving…', async () => {
+    if (!token){ showToast('Sign in with Google first'); signIn(); return; }
+    const data = await backupData();
+    try {
+      await driveUpload(new Blob([JSON.stringify(data)], { type: 'application/json' }), 'celebrate-backup-' + stamp() + '.json');
+      showToast('Backup saved to Google Drive › Celebrate');
+    } catch (e) {
+      if (e.message === 'AUTH') showToast('Google session expired — sign in again');
+      else if (e.message === 'FORBIDDEN') showToast('Drive said no — enable the Google Drive API in your Cloud project, then sign out and back in', 7000);
+      else showToast('Couldn’t save the backup: ' + e.message);
+    }
+  }));
+  $('importBtn').addEventListener('click', () => $('importFile').click());
+  $('importFile').addEventListener('change', async () => {
+    const f = $('importFile').files[0]; $('importFile').value = '';
+    if (!f) return;
+    let data = null;
+    try { data = JSON.parse(await f.text()); } catch (e) { showToast('That file isn’t a Celebrate backup'); return; }
+    if (!data || data.app !== 'celebrate' || typeof data.people !== 'object'){ showToast('That file isn’t a Celebrate backup'); return; }
+    const n = Object.keys(data.people || {}).length, c = (data.cards || []).length;
+    if (!await confirmSheet({ title: 'Restore this backup?', message: n + ' people and ' + c + ' cards from ' + (data.exportedAt || '').slice(0, 10) + '. Newer notes win; nothing here is deleted.', okText: 'Restore', danger: false })) return;
+    const newer = (a, b) => !a || ((b && b.updatedAt) || '') > ((a && a.updatedAt) || '');
+    Object.values(data.people || {}).forEach(p => { if (p && p.key && newer(people[p.key], p)) people[p.key] = p; });
+    Store.set('people', people);
+    Object.assign(aliases, data.aliases || {}); Store.set('aliases', aliases);
+    Object.entries(data.skipped || {}).forEach(([k, v]) => { if (!skipped[k]) skipped[k] = v; }); Store.set('skipped', skipped);
+    (data.manual || []).forEach(m => { if (m && m.id && !manual.some(x => x.id === m.id)) manual.push(m); }); Store.set('manual', manual);
+    Object.assign(made, data.made || {}); Store.set('made', made);
+    if (data.settings){ if (Array.isArray(data.settings.keywords)) settings.keywords = [...new Set([...settings.keywords, ...data.settings.keywords])]; if (data.settings.from && !settings.from) settings.from = data.settings.from; Store.set('settings', settings); }
+    let added = 0;
+    try { const have = new Set((await DB.all()).map(d => d.id)); for (const d of (data.cards || [])){ if (d && d.id && d.id !== '__current__' && !have.has(d.id)){ await DB.put(d); added++; } } } catch (e) { /* no IndexedDB */ }
+    await refreshCardIndex(); buildUpcoming(false); buildPeople(); renderPersonPill();
+    showToast('Restored ' + n + ' people' + (added ? ' and ' + added + ' cards' : ''));
+  });
 
   // ---------- Google Drive ----------
   // drive.file is the narrow scope: the app can only see files it created itself, in a
@@ -2504,11 +2819,12 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     try { const cur = await DB.get('__current__'); if (cur){ state = normalizeDraft(cur); state.id = cur.draftId || null; } }
     catch (e) { /* no IndexedDB — the localStorage draft loaded above stands */ }
     resetHistory(); buildAll();
+    await refreshCardIndex(); buildUpcoming(false);
   }
   buildAll(); buildUpcoming(); showView('upcoming'); init();
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') buildUpcoming(); });
 
-  window.__celebrate = { state: () => state, upcomingItems, extractName, matchKeyword, PALETTES, OCCASIONS, DB, undo, redo, skipped: () => skipped, people: () => people, openPerson, setToken: (t) => { token = t; } };
+  window.__celebrate = { state: () => state, upcomingItems, extractName, matchKeyword, PALETTES, OCCASIONS, DB, undo, redo, skipped: () => skipped, people: () => people, aliases: () => aliases, cardIndex: () => cardIndex, openPerson, setToken: (t) => { token = t; } };
 })();
 </script>
 </body>
