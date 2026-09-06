@@ -9,11 +9,15 @@ the rest never sneak up on you. Single `index.html`, no build step, deployed on 
   scans every calendar you can see plus the Birthdays contacts calendar for the next 30 days,
   matches occasion keywords, dedupes the same person+date across calendars, and groups
   Today / This week / Later. Cards you've made get a check. Add anything not on a calendar by hand.
-- **Make a card** — 18 occasions, 8 named palettes, 4 layouts (portrait 4:5 and landscape 16:9),
-  photos with circle / arch / blob / polaroid / full-bleed masks (drag to pan, pinch to zoom),
-  16 original SVG stickers, live preview.
-- **Share** — 1080×1350 PNG (1600×900 landscape) via the Web Share API on phones, with
-  Download / Copy message / Email-HTML fallbacks. Optional "Ask Claude" for a message draft.
+  Any row can be skipped once or muted for good (undo under "Skipped").
+- **Make a card** — 18 occasions, 8 named palettes with per-color fine-tuning, 4 layouts in three
+  formats (portrait 4:5, square 1:1, landscape 16:9), photos with circle / arch / blob / polaroid /
+  full-bleed masks (drag to pan, pinch to zoom) plus filters and borders, solid / gradient / pattern /
+  photo backgrounds, frames, 16 original SVG stickers (resize, rotate, flip, layer), free-floating
+  text blocks, a Style tab (12 Google Fonts across display / body / handwriting roles, size sliders,
+  alignment, text color), undo/redo, named saved drafts with thumbnails, and a live preview.
+- **Share** — 1080×1350 PNG (1080×1080 square, 1600×900 landscape) via the Web Share API on
+  phones, with Download / Copy message / Email-HTML fallbacks. Optional "Ask Claude" for a draft.
 
 ## Setup
 
@@ -25,7 +29,8 @@ the rest never sneak up on you. Single `index.html`, no build step, deployed on 
 ## Privacy
 
 Everything stays in the browser: photos are never uploaded, calendar data is display-only and
-cached locally, and the Google token is never written to disk. No backend, no secrets in code.
+cached locally, saved drafts live in this browser's IndexedDB, and the Google token is never
+written to disk. No backend, no secrets in code.
 
 ## Local testing
 
