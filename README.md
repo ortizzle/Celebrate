@@ -46,6 +46,16 @@ the rest never sneak up on you. Single `index.html`, no build step, deployed on 
   their cards, and "Make card" continues the latest draft or starts a new one. "New card for anyone"
   starts a card for someone who isn't on any calendar (they get a person card too), and the editor's
   "Link to a person" menu has a "Someone new…" option for the same thing mid-edit.
+- **Year over year** — a date you add by hand carries its original year, so Celebrate knows the
+  age: rows say "turns 40" or "25 years", milestone birthdays (under 21, then every fifth) and every
+  anniversary get a big number seeded on the card, and Claude is told the age. When someone already
+  has a sent card, the editor shows it ("Last time · Sep 2025 · Marigold Fiesta · Big Name") with
+  "Start from it", and Auto-design / Ask Claude are told last time's palette, layout and message so
+  this year's is different on purpose.
+- **Email** hands the PNG to your mail app through the share sheet (Gmail attaches it); where file
+  sharing isn't available it downloads the PNG and opens a prefilled email instead.
+- **Offline and updates** — a service worker keeps the app opening without a network and caches the
+  export libraries; a toast says when a new version has landed.
 - **Backup** — Settings › Your data exports a restorable JSON backup (people, notes, dates, card
   history with thumbnails; no photos or full-size images), a plain-text version of the notes, or
   saves the backup straight to Drive. Restore merges: newer notes win, nothing is deleted.
@@ -77,3 +87,16 @@ npx serve .
 
 Add `http://localhost:3000` (or whatever port `serve` picks) as an authorized origin on the
 OAuth client to sign in locally.
+
+## Tests
+
+```
+tests/run.sh            # all suites
+tests/run.sh stickers-gif   # one suite
+```
+
+Headless Playwright (`npm i -g playwright && npx playwright install chromium`). The runner starts a
+static server on :8765, fetches html2canvas and gif.js into `tests/vendor/` once, and runs each
+`tests/*.test.js`; every suite prints its checks and ends with `errors: none`. Storage rule: sent
+cards keep their full-size image for a year, thumbnails and history forever (Settings shows the
+current footprint).

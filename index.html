@@ -312,6 +312,9 @@
   .initials{ width:52px; height:52px; border-radius:14px; background:var(--accent-2); color:#3a2a00; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:1.2rem; display:flex; align-items:center; justify-content:center; }
   .notes-preview{ font-size:.82rem; color:var(--ink-soft); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
   .person-dates{ display:flex; flex-wrap:wrap; gap:6px; }
+  .last-card{ display:flex; gap:12px; align-items:flex-start; margin-top:12px; padding:10px; border-radius:14px; background:var(--paper-2); border:1px dashed var(--paper-edge); }
+  .last-card img{ width:64px; aspect-ratio:4/5; object-fit:cover; border-radius:8px; flex:none; margin:0; }
+  .last-card .row .btn{ flex:0 1 auto; }
   .people-tools{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
   .people-tools input[type="search"]{ flex:1 1 150px; min-height:48px; border:1px solid var(--paper-edge); border-radius:12px; padding:0 14px; font:inherit; background:var(--paper); color:var(--ink); }
   .name-btn{ background:none; border:none; padding:0; min-height:48px; font:inherit; font-weight:700; font-size:1rem; color:var(--ink); text-align:left; cursor:pointer;
@@ -399,7 +402,7 @@
             <select id="manOcc"></select>
           </div>
           <div class="field" style="flex:1 1 150px">
-            <label for="manDate">Date</label>
+            <label for="manDate">Date (the original year gives the age)</label>
             <input type="date" id="manDate">
           </div>
         </div>
@@ -463,7 +466,7 @@
         <button class="btn ghost" id="downloadBtn" type="button">Download PNG</button>
         <button class="btn ghost" id="gifBtn" type="button">Animated GIF</button>
         <button class="btn ghost" id="copyMsgBtn" type="button">Copy message</button>
-        <button class="btn ghost" id="emailBtn" type="button">Email HTML</button>
+        <button class="btn ghost" id="emailBtn" type="button">Email</button>
       </div>
     </section>
 
@@ -526,6 +529,7 @@
     <div class="field">
       <span class="lbl">Your data</span>
       <p class="hint" style="margin-bottom:8px">People, notes, dates and card history live only in this browser. Back them up so they survive a new phone.</p>
+      <p class="hint" id="storageHint" style="margin-bottom:8px"></p>
       <div class="row">
         <button class="btn quiet" id="exportJsonBtn" type="button">Export backup</button>
         <button class="btn quiet" id="exportTextBtn" type="button">Notes as text</button>
@@ -634,7 +638,7 @@
 <script>
 (function(){
   'use strict';
-  const APP_VERSION = '1.6.1';
+  const APP_VERSION = '1.7.0';
 
   // ---------- helpers ----------
   function el(tag, attrs, kids){
@@ -1456,6 +1460,12 @@
     if (opts.name !== undefined) state.name = opts.name;
     state.sourceKey = opts.sourceKey || null;
     if (opts.person){ state.personKey = opts.person.key; state.personName = opts.person.name; }
+    state.count = opts.count || null;
+    state.texts = state.texts.filter(t => !t.auto);
+    if (isMilestone(occ.id, state.count)){
+      const big = occ.id === 'birthday';
+      state.texts.push({ uid: uid(), auto: true, text: big ? state.count + '!' : countLabel(occ.id, state.count), x: big ? 80 : 50, y: big ? 24 : 12, rot: big ? -10 : 0, size: big ? 15 : 8, font: 'display', color: 'a0', customColor: '#ffffff' });
+    }
     selected = null;
     occasionExpanded = false;
     touch();
@@ -1473,10 +1483,22 @@
         el('div', {}, [el('b', { text: occ.label }), el('div', { class: 'hint', text: occ.kicker })]),
         el('button', { class: 'btn quiet', type: 'button', text: 'Change', onclick: () => { occasionExpanded = true; buildOccasionPanel(); } })
       ]));
+      const last = lastCardFor(state.personKey, occ.id);
+      if (last){
+        const ls = lastCardSummary(last);
+        p.appendChild(el('div', { class: 'last-card' }, [
+          last.thumb ? el('img', { src: last.thumb, alt: '' }) : null,
+          el('div', { class: 'occ-main' }, [
+            el('b', { text: 'Last time · ' + ls.when }),
+            el('div', { class: 'hint', text: ls.palette + ' · ' + ls.layout + (ls.message ? ' · “' + ls.message.slice(0, 70) + (ls.message.length > 70 ? '…' : '') + '”' : '') }),
+            el('div', { class: 'row', style: 'margin-top:6px' }, [toolBtn('Start from it', async () => { const d = await DB.get(last.id); if (d) loadDraft(d, { copy: true }); })])
+          ])
+        ]));
+      }
       p.appendChild(el('div', { class: 'row', style: 'margin-top:14px' }, [
-        el('button', { class: 'btn primary', type: 'button', text: '✨ Auto-design this card', onclick: (e) => autoDesign(e.currentTarget) })
+        el('button', { class: 'btn primary', type: 'button', text: last ? '✨ Auto-design — different from last time' : '✨ Auto-design this card', onclick: (e) => autoDesign(e.currentTarget) })
       ]));
-      p.appendChild(el('p', { class: 'hint', text: 'Claude picks a palette, layout, fonts, stickers and message for this occasion — it never sees your photos.', style: 'margin-top:8px' }));
+      p.appendChild(el('p', { class: 'hint', text: (last ? 'Claude sees last time’s palette, layout and message and steers away from them. ' : '') + 'It picks a palette, layout, fonts, stickers and message — it never sees your photos.', style: 'margin-top:8px' }));
       return;
     }
     p.appendChild(lbl('Occasion', 'margin-bottom:10px'));
@@ -1565,8 +1587,9 @@
     if (!settings.apiKey){ showToast('Add an Anthropic API key in Settings to use this'); return; }
     const occ = currentOccasion();
     showToast('Asking Claude…');
-    const about = personNotes();
-    const prompt = `Occasion: ${occ.label}. Recipient: ${state.name.trim() || 'a friend'}.` + (about ? ` About them: ${about}.` : '') +
+    const about = personNotes(), last = lastCardFor(state.personKey, occ.id);
+    const prompt = `Occasion: ${occ.label}. Recipient: ${state.name.trim() || 'a friend'}.` + (about ? ` About them: ${about}.` : '') + milestoneLine() +
+      (last && last.message ? ` Last time (${lastCardSummary(last).when}) the card said: "${lastCardSummary(last).message}" — say something new this time, don't reuse its phrasing.` : '') +
       ' Write the message body only (2–3 sentences, warm and specific, no greeting line, no sign-off, no emoji).';
     try {
       const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 20000);
@@ -1603,7 +1626,9 @@
     const paletteIds = PALETTES.map(p => p.id), layoutIds = LAYOUTS.map(l => l.id);
     const displayIds = FONTS.display.map(f => f.id), bodyIds = FONTS.body.map(f => f.id), handIds = FONTS.hand.map(f => f.id);
     const stickerIds = Object.keys(STICKERS), frameIds = FRAMES.map(([id]) => id), patternIds = PATTERNS.map(([id]) => id);
-    const prompt = `Design a ${occ.label} card for ${state.name.trim() || 'a friend'}.` + (about ? ` About them: ${about}.` : '') + `
+    const last = lastCardFor(state.personKey, occ.id), ls = last ? lastCardSummary(last) : null;
+    const prompt = `Design a ${occ.label} card for ${state.name.trim() || 'a friend'}.` + (about ? ` About them: ${about}.` : '') + milestoneLine() +
+      (ls ? ` Last time (${ls.when}) their card used the "${ls.palette}" palette and the ${ls.layout} layout` + (ls.message ? ` and said: "${ls.message}"` : '') + `. Make this year's clearly different — a different palette and layout, fresh wording — while keeping it just as warm.` : '') + `
 Pick ONE creative, cohesive combination — don't default to the safest option. Respond with ONLY this JSON, no markdown fences, no commentary:
 {
   "message": "2-3 sentence card message, no greeting line, no sign-off, no emoji",
@@ -1901,7 +1926,8 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     state.id = opts.copy ? null : d.id;
     state.title = opts.copy ? '' : (d.title || '');
     delete state.sent; delete state.sentVia; delete state.sentAt; delete state.file; delete state.mime; delete state.driveId; delete state.driveLink;
-    selected = null; resetHistory(); touch(); buildAll(); showView('maker');
+    if (opts.copy) state.sourceKey = null;
+    selected = null; occasionExpanded = false; resetHistory(); touch(); buildAll(); showView('maker');
     showToast(opts.copy ? 'Opened a copy of “' + (d.title || 'Untitled') + '”' : 'Opened “' + state.title + '”');
   }
 
@@ -2088,26 +2114,19 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     catch (e) { showToast('Couldn’t copy — select the message text and copy it manually'); }
   });
 
-  function buildEmailHtml(dataUrl){
-    const occ = currentOccasion();
-    return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f2f2;"><tr><td align="center" style="padding:32px 16px;">` +
-      `<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;font-family:Helvetica,Arial,sans-serif;">` +
-      `<tr><td><img src="${dataUrl}" width="600" style="display:block;width:100%;height:auto;" alt="${escapeHtml(occ.label)} card for ${escapeHtml(state.name)}"></td></tr>` +
-      `<tr><td style="padding:24px 32px;color:#222;font-size:16px;line-height:1.6;">` +
-      `<div style="font-size:20px;font-weight:bold;margin-bottom:12px;">${escapeHtml(occ.kicker)} ${escapeHtml(state.name)}</div>` +
-      `${escapeHtml(state.message).replace(/\n/g, '<br>')}<br><br><em>${escapeHtml(state.from)}</em></td></tr></table></td></tr></table>`;
-  }
-  $('emailBtn').addEventListener('click', () => {
-    // Safari only allows clipboard writes inside the tap — so hand ClipboardItem a promise
-    // and let the PNG render finish after the gesture has already been honoured.
-    const htmlP = ensureBlob().then(blob => new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); })).then(buildEmailHtml);
-    const item = { 'text/plain': htmlP.then(h => new Blob([h], { type: 'text/plain' })) };
-    if (typeof ClipboardItem !== 'undefined' && ClipboardItem.supports?.('text/html') !== false) item['text/html'] = htmlP.then(h => new Blob([h], { type: 'text/html' }));
-    const write = (typeof ClipboardItem !== 'undefined') ? navigator.clipboard.write([new ClipboardItem(item)]) : htmlP.then(h => navigator.clipboard.writeText(h));
-    htmlP.then(() => {}).catch(() => {});
-    write.then(() => { showToast('Email HTML copied — in Gmail, start a new message and paste', 4500); markMade(); ensureBlob().then(b => archiveSent('Email', b)); })
-      .catch(() => showToast('Couldn’t copy the email — try Share to Mail instead'));
-  });
+  // Gmail strips inline data-URL images from pasted HTML, so the reliable path is the share sheet
+  // (which attaches the PNG to any mail app) and, failing that, a download plus a prefilled mailto.
+  $('emailBtn').addEventListener('click', () => withBusy($('emailBtn'), 'Preparing…', async () => {
+    const blob = await ensureBlob();
+    const r = await shareBlob(blob, 'celebrate-card.png', 'image/png');
+    if (r === 'shared'){ showToast('Handed to your mail app'); markMade(); archiveSent('Email', blob); return; }
+    if (r === 'cancelled') return;
+    downloadBlob(blob, 'celebrate-card.png');
+    const subject = (currentOccasion().kicker + ' ' + state.name.trim()).replace(/,$/, '').trim();
+    window.location.href = 'mailto:?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(fullText() + '\n\n(Attach celebrate-card.png from your downloads.)');
+    showToast('Card downloaded — attach it to the email that just opened', 5000);
+    markMade(); archiveSent('Email', blob);
+  }));
 
   // ---------- settings ----------
   const settingsOverlay = $('settingsOverlay');
@@ -2127,6 +2146,8 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
       ? 'Unchecked calendars are left out of the scan. By default only calendars you keep visible in Google Calendar are scanned.'
       : 'Sign in and refresh once to load your calendars here. By default only calendars you keep visible in Google Calendar are scanned.';
     $('versionLabel').textContent = 'Celebrate v' + APP_VERSION;
+    $('storageHint').textContent = '';
+    storageSummary().then(st => { if (st) $('storageHint').textContent = st.sent + ' sent card' + (st.sent === 1 ? '' : 's') + ' and ' + st.drafts + ' draft' + (st.drafts === 1 ? '' : 's') + ' · about ' + (st.mb < .1 ? '<0.1' : st.mb.toFixed(1)) + ' MB. Full-size images of sent cards are kept for a year (' + st.withImage + ' now), thumbnails and history forever — Drive is the long-term home.'; });
     settingsOverlay.hidden = false;
   }
   $('settingsBtn').addEventListener('click', openSettings);
@@ -2267,6 +2288,10 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     return Math.round(h / 24) + ' day' + (h >= 48 ? 's' : '') + ' ago';
   }
 
+  const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][Math.min(n % 10, 4)] || 'th');
+  const countLabel = (occId, n) => occId === 'birthday' ? 'turns ' + n : occId === 'anniversary' ? n + (n === 1 ? ' year' : ' years') : ordinal(n) + ' year';
+  // Birthdays under 21 and every fifth year after are worth a big number on the card; anniversaries always are.
+  const isMilestone = (occId, n) => !!n && (occId === 'anniversary' || (occId === 'birthday' && (n <= 21 || n % 5 === 0)));
   function manualOccurrences(){
     const today = AZ.today(), end = AZ.addDays(today, 30), out = [];
     for (const m of manual){
@@ -2276,7 +2301,10 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
         for (const y of [Number(today.slice(0, 4)), Number(today.slice(0, 4)) + 1]) dates.push(`${y}-${md}`);
       } else dates.push(m.date);
       for (const d of dates){
-        if (d >= today && d <= end) out.push({ name: m.name, occasionId: m.occasionId, date: d, title: m.name, calendar: 'Added by you', source: 'manual', manualId: m.id });
+        if (d >= today && d <= end){
+          const origin = Number(m.date.slice(0, 4)), count = m.yearly && Number(d.slice(0, 4)) > origin ? Number(d.slice(0, 4)) - origin : null;
+          out.push({ name: m.name, occasionId: m.occasionId, date: d, title: m.name, calendar: 'Added by you', source: 'manual', manualId: m.id, count });
+        }
       }
     }
     return out;
@@ -2391,6 +2419,7 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
       isMade ? el('span', { class: 'pill made', text: 'Card sent' }) : null,
       cards.drafts.length ? el('span', { class: 'pill', text: cards.drafts.length + (cards.drafts.length === 1 ? ' draft' : ' drafts') }) : null,
       cards.sent.length ? el('span', { class: 'pill', text: cards.sent.length + (cards.sent.length === 1 ? ' past card' : ' past cards') }) : null,
+      it.count ? el('span', { class: 'pill', text: countLabel(it.occasionId, it.count) }) : null,
       it.calendars.length > 1 ? el('span', { class: 'pill', text: `${it.calendars.length} calendars` }) : null,
       it.source === 'manual' ? el('span', { class: 'pill', text: 'Added by you' }) : null
     ]);
@@ -2411,7 +2440,6 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
 
   // manual add form
   OCCASIONS.forEach(o => $('manOcc').appendChild(el('option', { value: o.id, text: o.label })));
-  $('manDate').min = AZ.today();
   $('manAddBtn').addEventListener('click', () => {
     const name = $('manName').value.trim(), date = $('manDate').value;
     if (!name){ showToast('Add a name'); $('manName').focus(); return; }
@@ -2481,7 +2509,8 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
         if (d.id === '__current__') return;
         const k = cardPersonKey(d); if (!k) return;
         const e = idx[k] || (idx[k] = { drafts: [], sent: [] });
-        (d.sent ? e.sent : e.drafts).push({ id: d.id, title: d.title || 'Untitled', sourceKey: d.sourceKey || null, sentAt: d.sentAt || null, savedAt: d.savedAt || null, occasionId: d.occasionId });
+        (d.sent ? e.sent : e.drafts).push({ id: d.id, title: d.title || 'Untitled', sourceKey: d.sourceKey || null, sentAt: d.sentAt || null, savedAt: d.savedAt || null, occasionId: d.occasionId,
+          paletteId: d.paletteId, layoutId: d.layoutId, message: d.message || '', display: d.style && d.style.display, thumb: d.sent ? d.thumb : null });
       });
     } catch (e) { /* no IndexedDB */ }
     Object.values(idx).forEach(e => { e.drafts.sort((a, b) => (b.savedAt || '').localeCompare(a.savedAt || '')); e.sent.sort((a, b) => (b.sentAt || '').localeCompare(a.sentAt || '')); });
@@ -2489,6 +2518,16 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     return idx;
   }
   const cardsFor = (key) => cardIndex[key] || { drafts: [], sent: [] };
+  // The most recent card sent to this person — same occasion if there is one — so this year's can be different on purpose.
+  function lastCardFor(key, occId){
+    const sent = key ? cardsFor(aliases[key] || key).sent : [];
+    return sent.find(c => c.occasionId === occId) || sent[0] || null;
+  }
+  function lastCardSummary(last){
+    const pal = byId(PALETTES, last.paletteId), lay = byId(LAYOUTS, last.layoutId);
+    return { when: last.sentAt ? new Date(last.sentAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'earlier', palette: pal ? pal.name : 'a custom palette', layout: lay ? lay.name : 'a custom layout', message: (last.message || '').trim().slice(0, 300) };
+  }
+  const milestoneLine = () => state.count ? (state.occasionId === 'birthday' ? ` They are turning ${state.count}.` : ` It is their ${ordinal(state.count)} ${currentOccasion().label.toLowerCase()}.`) : '';
   DB.onChange = () => { refreshCardIndex().then(() => { if (!$('viewUpcoming').hidden) buildUpcoming(false); }); };
 
   async function cardsOf(key){
@@ -2664,7 +2703,7 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
       ]),
       el('label', { class: 'chk' }, [yearly, el('span', { text: 'Repeats every year' })]),
       el('div', { class: 'row' }, [add]),
-      el('p', { class: 'hint', text: 'Dates you add here get an “Add to Google Calendar” link so your calendar stays the source of truth.' })
+      el('p', { class: 'hint', text: 'Enter the original date (birth year, wedding year) and Celebrate knows the age — milestone birthdays and every anniversary get a big number on the card. Dates you add here also get an “Add to Google Calendar” link.' })
     ]);
   }
 
@@ -2687,7 +2726,9 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     const dateList = el('div', {}, dates.map(d => {
       const occ = byId(OCCASIONS, d.occasionId) || byId(OCCASIONS, 'congrats'); const parts = AZ.parts(d.date);
       const m = d.manualId ? manual.find(x => x.id === d.manualId) : null;
-      const kids = [el('span', { text: occ.label + ' · ' + parts.mon + ' ' + parts.day + (m ? '' : ' · from your calendar') })];
+      let ageText = '';
+      if (m && m.yearly){ const origin = Number(m.date.slice(0, 4)), thisY = Number(AZ.today().slice(0, 4)), nextY = d.md >= AZ.today().slice(5) ? thisY : thisY + 1; if (nextY > origin) ageText = ' · ' + countLabel(d.occasionId, nextY - origin) + ' next'; }
+      const kids = [el('span', { text: occ.label + ' · ' + parts.mon + ' ' + parts.day + (m ? ageText : ' · from your calendar') })];
       if (m) kids.push(el('div', { class: 'row', style: 'gap:6px' }, [
         el('a', { class: 'btn quiet', href: calendarLink(p.name, occ, m.date, m.yearly), target: '_blank', rel: 'noopener', text: 'Add to Google Calendar ↗' }),
         toolBtn('Remove', async () => { if (!await confirmSheet({ title: 'Remove this date?', message: occ.label + ', ' + AZ.pretty(m.date) + '.', okText: 'Remove' })) return; manual = manual.filter(x => x.id !== m.id); Store.set('manual', manual); buildUpcoming(false); openPerson(key); })
@@ -2739,7 +2780,7 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     }
     imgCache.clear(); filteredCache.clear();
     state = defaultDraft(); selected = null;
-    applyOccasion(occ, { name: p.name, sourceKey: next ? next.key : null, resetMessage: true, person: p });
+    applyOccasion(occ, { name: p.name, sourceKey: next ? next.key : null, resetMessage: true, person: p, count: next && next.occasionId === occ.id ? next.count : null });
     personOverlay.hidden = true; draftsOverlay.hidden = true;
     resetHistory(); buildAll(); selectTab('Layout'); showView('maker');
   }
@@ -2945,16 +2986,37 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
   }
 
   // ---------- init ----------
+  const KEEP_IMAGE_DAYS = 365;
+  async function pruneOldImages(){
+    try {
+      const cutoff = new Date(Date.now() - KEEP_IMAGE_DAYS * 86400000).toISOString();
+      const old = (await DB.all()).filter(d => d.sent && d.file && (d.sentAt || '') < cutoff);
+      for (const d of old){ delete d.file; delete d.mime; await DB.put(d); }
+    } catch (e) { /* no IndexedDB */ }
+  }
+  async function storageSummary(){
+    try {
+      const all = (await DB.all()).filter(d => d.id !== '__current__');
+      const bytes = all.reduce((n, d) => n + (d.file ? d.file.size : 0) + (d.thumb ? d.thumb.length * .75 : 0) + (d.photos || []).reduce((m, p) => m + (p && p.dataUrl ? p.dataUrl.length * .75 : 0), 0), 0);
+      return { drafts: all.filter(d => !d.sent).length, sent: all.filter(d => d.sent).length, withImage: all.filter(d => d.sent && d.file).length, mb: bytes / 1048576 };
+    } catch (e) { return null; }
+  }
   async function init(){
     try { const cur = await DB.get('__current__'); if (cur){ state = normalizeDraft(cur); state.id = cur.draftId || null; } }
     catch (e) { /* no IndexedDB — the localStorage draft loaded above stands */ }
     resetHistory(); buildAll();
+    await pruneOldImages();
     await refreshCardIndex(); buildUpcoming(false);
   }
   buildAll(); buildUpcoming(); showView('upcoming'); init();
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible'){ buildUpcoming(); kickAnim(); } });
 
-  window.__celebrate = { state: () => state, upcomingItems, extractName, matchKeyword, PALETTES, OCCASIONS, DB, undo, redo, skipped: () => skipped, people: () => people, aliases: () => aliases, cardIndex: () => cardIndex, openPerson, STICKERS, ANIMS, applyAllAnims, buildAll, setToken: (t) => { token = t; } };
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')){
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+    let hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) showToast('Celebrate updated — reload to get the new version', 6000); hadController = true; });
+  }
+  window.__celebrate = { state: () => state, upcomingItems, extractName, matchKeyword, PALETTES, OCCASIONS, DB, undo, redo, skipped: () => skipped, people: () => people, aliases: () => aliases, cardIndex: () => cardIndex, openPerson, STICKERS, ANIMS, applyAllAnims, buildAll, lastCardFor, storageSummary, pruneOldImages, isMilestone, countLabel, setToken: (t) => { token = t; } };
 })();
 </script>
 </body>
