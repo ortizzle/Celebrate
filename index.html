@@ -370,6 +370,9 @@
         <p class="hint" id="calStatus"></p>
         <button class="btn primary" id="signInBtn" type="button">Sign in with Google</button>
       </div>
+      <div class="row" style="margin-bottom:14px">
+        <button class="btn quiet" id="anyoneBtn" type="button">＋ New card for anyone</button>
+      </div>
       <div id="setupCard" class="setup-card" hidden>
         <b>Connect your calendar</b>
         <ol>
@@ -573,6 +576,26 @@
   </div>
 </div>
 
+<div class="overlay" id="anyoneOverlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="anyoneTitle">
+    <div class="close-row"><button class="icon-btn on-paper" id="closeAnyone" aria-label="Close" type="button">✕</button></div>
+    <h3 id="anyoneTitle">New card</h3>
+    <p class="hint" style="margin-bottom:12px">For anyone — on your calendar or not. They get a person card too, so notes and this card stay together.</p>
+    <div class="field">
+      <label for="anyName">Who is it for?</label>
+      <input type="text" id="anyName" autocomplete="off" list="peopleNames" placeholder="Coach Ramirez">
+      <datalist id="peopleNames"></datalist>
+    </div>
+    <div class="field">
+      <label for="anyOcc">Occasion</label>
+      <select id="anyOcc"></select>
+    </div>
+    <div class="row">
+      <button class="btn primary" id="anyoneGo" type="button">Make the card</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="promptOverlay" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="promptTitle">
     <h3 id="promptTitle"></h3>
@@ -611,7 +634,7 @@
 <script>
 (function(){
   'use strict';
-  const APP_VERSION = '1.6.0';
+  const APP_VERSION = '1.6.1';
 
   // ---------- helpers ----------
   function el(tag, attrs, kids){
@@ -2706,9 +2729,9 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     if (opts.focus === 'cards') requestAnimationFrame(() => cardsLbl.scrollIntoView({ block: 'start', behavior: 'smooth' }));
   }
 
-  function startCardFor(p, next){
+  function startCardFor(p, next, occId){
     const firstDate = personDates(p.key)[0];
-    const occ = byId(OCCASIONS, next ? next.occasionId : (firstDate ? firstDate.occasionId : 'birthday')) || byId(OCCASIONS, 'birthday');
+    const occ = byId(OCCASIONS, occId || (next ? next.occasionId : (firstDate ? firstDate.occasionId : 'birthday'))) || byId(OCCASIONS, 'birthday');
     if (state.id || state.photos.some(Boolean) || (state.message && state.message.trim() && state.message !== state.lastAutoMessage)){
       // Don't quietly overwrite an unsaved card — the in-progress one becomes its own draft.
       state.id = state.id || 'd' + Date.now();
@@ -2745,13 +2768,37 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     const p = state.personKey && people[aliases[state.personKey] || state.personKey];
     if (p) return openPerson(p.key);
     const idx = peopleIndex();
-    if (!idx.length){ showToast('No people yet — they appear from your calendar, or add one under People'); return; }
-    const v = await menuSheet('Who is this card for?', idx.slice(0, 14).map(x => ({ label: x.name, value: x.key })));
+    const v = await menuSheet('Who is this card for?', [{ label: 'Someone new…', value: '__new__', cls: 'primary' }, ...idx.slice(0, 14).map(x => ({ label: x.name, value: x.key }))]);
     if (!v) return;
-    const person = people[v] || ensurePerson(idx.find(x => x.key === v).name);
+    let person;
+    if (v === '__new__'){
+      const name = await promptSheet({ title: 'Who is this card for?', label: 'Name', okText: 'Link' });
+      if (!name) return;
+      person = ensurePerson(name); if (isRemoved(person.key)) restorePerson(person.key);
+    } else person = people[v] || ensurePerson(idx.find(x => x.key === v).name);
     state.personKey = person.key; state.personName = person.name;
     if (!state.name.trim()) state.name = person.name;
     touch(); buildAll();
+  });
+
+  const anyoneOverlay = $('anyoneOverlay');
+  OCCASIONS.forEach(o => $('anyOcc').appendChild(el('option', { value: o.id, text: o.label })));
+  function openAnyone(){
+    const dl = $('peopleNames'); dl.textContent = '';
+    peopleIndex().forEach(x => dl.appendChild(el('option', { value: x.name })));
+    $('anyName').value = ''; $('anyOcc').value = 'birthday';
+    anyoneOverlay.hidden = false; $('anyName').focus();
+  }
+  $('anyoneBtn').addEventListener('click', openAnyone);
+  $('closeAnyone').addEventListener('click', () => anyoneOverlay.hidden = true);
+  anyoneOverlay.addEventListener('click', (e) => { if (e.target === anyoneOverlay) anyoneOverlay.hidden = true; });
+  $('anyName').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('anyoneGo').click(); });
+  $('anyoneGo').addEventListener('click', () => {
+    const name = $('anyName').value.trim();
+    if (!name){ showToast('Add a name'); $('anyName').focus(); return; }
+    const p = ensurePerson(name); if (isRemoved(p.key)) restorePerson(p.key);
+    anyoneOverlay.hidden = true;
+    startCardFor(p, upcomingItems().find(i => pkey(i.name) === p.key) || null, $('anyOcc').value);
   });
 
   // One tile for drafts, sent cards and a person's history.

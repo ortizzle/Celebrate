@@ -43,7 +43,9 @@ the rest never sneak up on you. Single `index.html`, no build step, deployed on 
   under People › Removed. Merging a duplicate moves their notes and cards to the other person and
   remembers the alias, so future calendar rows under either name land on one person.
 - **Upcoming is the hub** — each row shows that person's drafts and past cards; the check opens
-  their cards, and "Make card" continues the latest draft or starts a new one.
+  their cards, and "Make card" continues the latest draft or starts a new one. "New card for anyone"
+  starts a card for someone who isn't on any calendar (they get a person card too), and the editor's
+  "Link to a person" menu has a "Someone new…" option for the same thing mid-edit.
 - **Backup** — Settings › Your data exports a restorable JSON backup (people, notes, dates, card
   history with thumbnails; no photos or full-size images), a plain-text version of the notes, or
   saves the backup straight to Drive. Restore merges: newer notes win, nothing is deleted.
