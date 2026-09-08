@@ -49,8 +49,10 @@ the rest never sneak up on you. Single `index.html`, no build step, deployed on 
   someone else*. Removed people vanish from Upcoming, People and the editor, and can be restored
   under People › Removed. Merging a duplicate moves their notes and cards to the other person and
   remembers the alias, so future calendar rows under either name land on one person.
-- **Upcoming is the hub** — each row shows that person's drafts and past cards; the check opens
-  their cards, and "Make card" continues the latest draft or starts a new one. "New card for anyone"
+- **Upcoming is the hub** — each row has two things to tap: the row itself opens that person's
+  card (notes, dates, drafts, past cards, and the options that used to hide behind a ⋯ menu —
+  mark done, skip this year, remove a date, remove the person), and "Make card" continues the
+  latest draft or starts a new one. Pills on the row show drafts, past cards and "Card sent". "New card for anyone"
   starts a card for someone who isn't on any calendar (they get a person card too), and the editor's
   "Link to a person" menu has a "Someone new…" option for the same thing mid-edit.
 - **Year over year** — a date you add by hand carries its original year, so Celebrate knows the

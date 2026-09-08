@@ -47,7 +47,7 @@ const fs = require('fs');
   // ---- check button is a door to the person's cards ----
   await page.getByRole('button', { name: 'Upcoming' }).click();
   await page.waitForTimeout(300);
-  await page.locator('#upcomingList .occ-row', { hasText: 'Aunt Jane' }).locator('.check-btn').click();
+  await page.locator('#upcomingList .occ-row', { hasText: 'Aunt Jane' }).locator('.occ-open').click();
   await page.waitForSelector('#personOverlay:not([hidden])');
   console.log('6 sheet:', await page.locator('#personTitle').textContent(), '| labels:', await page.locator('#personBody .lbl').allTextContents(), '| draft tiles:', await page.locator('#personBody .draft-card').count());
   console.log('   top buttons:', await page.locator('#personBody .row').first().locator('button').allTextContents());
@@ -64,10 +64,11 @@ const fs = require('fs');
   console.log('   upcoming has manual row:', (await rows()).filter(r => /Aunt Jane/.test(r)));
 
   // ---- Remove "Sedona" as not-a-person from Upcoming's ⋯ menu ----
-  await page.locator('#upcomingList .occ-row', { hasText: 'Sedona' }).getByRole('button', { name: 'More options for Sedona' }).click();
-  await page.waitForSelector('#menuOverlay:not([hidden])');
-  console.log('8 row menu:', await page.locator('#menuList button').allTextContents());
-  await page.locator('#menuList').getByRole('button', { name: 'Remove Sedona from Celebrate…' }).click();
+  await page.locator('#upcomingList .occ-row', { hasText: 'Sedona' }).locator('.occ-open').click();
+  await page.waitForSelector('#personOverlay:not([hidden])');
+  console.log('8 row tap targets:', await page.evaluate(() => [...document.querySelectorAll('#upcomingList .occ-row')][0].querySelectorAll('button, a').length),
+    '| sheet actions:', await page.locator('#personBody button').allTextContents());
+  await page.locator('#personBody').getByRole('button', { name: 'Remove from Celebrate…' }).click();
   await page.waitForSelector('#menuOverlay:not([hidden])');
   await page.locator('#menuList').getByRole('button', { name: /Not a person/ }).click();
   await page.waitForTimeout(300);

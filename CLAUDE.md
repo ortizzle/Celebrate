@@ -54,6 +54,13 @@ close an overlay outside a `.overlay` element or the stack drifts.
 vanishes, clears an active look (`clearLook`, restoring `show` flags), and offers `toastUndo`.
 Any single tap that rearranges the card must offer `toastUndo` with a `snapshot()` taken first.
 
+## Rows
+
+An Upcoming row has exactly two tap targets: `.occ-open` (the whole row → that person's sheet) and
+one action button. Per-occurrence options (mark done, skip this year) and per-date options live on
+the person sheet, keyed by the occurrence key `pkey(name)|date` from `upcomingItems()`. Resist
+adding a third control to the row; the person's card is where management goes.
+
 ## Dates on screen
 
 `renderToday()` fills the header label and re-runs on `visibilitychange` so an app left open

@@ -304,9 +304,12 @@
   .pill{ display:inline-block; font-size:.7rem; font-weight:700; padding:2px 8px; border-radius:999px; background:var(--paper); border:1px solid var(--paper-edge); letter-spacing:.02em; }
   .pill.made{ background:var(--ok); color:#fff; border-color:transparent; }
   .occ-actions{ display:flex; gap:6px; align-items:center; }
-  .check-btn{ width:48px; height:48px; border-radius:12px; border:1px solid var(--paper-edge); background:var(--paper); color:var(--ink-soft); cursor:pointer; display:inline-flex; align-items:center; justify-content:center; padding:0; }
-  .check-btn[aria-pressed="true"]{ background:var(--ok); color:#fff; border-color:transparent; }
-  .check-btn svg{ width:20px; height:20px; }
+  .occ-row.tappable{ display:flex; flex-wrap:wrap; gap:8px 10px; }
+  .occ-open{ flex:1 1 100%; display:grid; grid-template-columns:52px 1fr; gap:12px; align-items:center;
+    background:none; border:none; padding:0; font:inherit; color:inherit; text-align:left; cursor:pointer; border-radius:12px; }
+  .occ-open .name-btn{ min-height:0; }
+  .occ-row.tappable .occ-actions{ margin-left:auto; }
+  @media (min-width:560px){ .occ-open{ flex:1 1 auto; } }
   .empty{ text-align:center; padding:26px 12px; color:var(--ink-soft); }
   .empty h3{ color:var(--ink); margin-bottom:4px; }
   .setup-card{ border:1px dashed var(--paper-edge); border-radius:14px; padding:14px; margin-bottom:14px; background:var(--paper-2); }
@@ -651,7 +654,7 @@
 <script>
 (function(){
   'use strict';
-  const APP_VERSION = '1.9.1';
+  const APP_VERSION = '1.9.2';
 
   // ---------- helpers ----------
   function el(tag, attrs, kids){
@@ -2579,29 +2582,6 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
       ov.hidden = false;
     });
   }
-  async function rowMenu(it, occ){
-    const done = !!made[it.key];
-    const items = [
-      { label: 'Notes, drafts & card history', value: 'person' },
-      { label: done ? 'Unmark “done”' : 'Mark done without a card', value: 'done' },
-      { label: 'Skip this one', value: 'once' },
-      { label: `Remove ${it.name} from Celebrate…`, value: 'remove' }
-    ];
-    if (it.source === 'manual') items.push({ label: 'Delete this occasion', value: 'delete', cls: 'danger' });
-    const v = await menuSheet(it.name + ' · ' + occ.label, items);
-    if (!v) return;
-    if (v === 'person'){ openPerson(pkey(it.name), it.name); return; }
-    if (v === 'remove'){ removePersonMenu(pkey(it.name), it.name); return; }
-    if (v === 'done'){ if (done) delete made[it.key]; else made[it.key] = { at: new Date().toISOString() }; Store.set('made', made); buildUpcoming(false); return; }
-    if (v === 'once') skipped[it.key] = { name: it.name, date: it.date, mode: 'once', at: new Date().toISOString() };
-    else if (v === 'delete'){
-      if (!await confirmSheet({ title: 'Delete this occasion?', message: `${it.name} — ${occ.label}, ${AZ.pretty(it.date)}.`, okText: 'Delete' })) return;
-      manual = manual.filter(m => m.id !== it.manualId); Store.set('manual', manual);
-    }
-    Store.set('skipped', skipped);
-    buildUpcoming(false);
-    if (v === 'once') showToast('Skipped — undo under “Skipped” at the bottom');
-  }
   function buildSkippedBox(hiddenRows){
     const box = $('skippedBox'), list = $('skippedList'); list.textContent = '';
     const always = Object.entries(skipped).filter(([k, v]) => k.startsWith('person|'));
@@ -2666,19 +2646,15 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
       it.calendars.length > 1 ? el('span', { class: 'pill', text: `${it.calendars.length} calendars` }) : null,
       it.source === 'manual' ? el('span', { class: 'pill', text: 'Added by you' }) : null
     ]);
-    // The check is a door, not a toggle: it opens this person's drafts and past cards.
-    const check = el('button', { class: 'check-btn', type: 'button', 'aria-pressed': isMade ? 'true' : 'false', 'aria-label': 'Cards for ' + it.name,
-      onclick: () => openPerson(pk, it.name, { focus: 'cards' }) });
-    check.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+    // Two things to tap, not four: open the person, or make the card. Everything else about this
+    // person — notes, dates, past cards, skipping, removing — lives on their card.
     const make = el('button', { class: 'btn ' + (isMade ? 'quiet' : 'primary'), type: 'button', text: cards.drafts.length ? 'Continue' : (isMade ? 'Again' : 'Make card'),
       onclick: () => makeCardFrom(it, occ) });
-    const more = el('button', { class: 'icon-btn on-paper', type: 'button', 'aria-label': 'More options for ' + it.name, text: '⋯', onclick: () => rowMenu(it, occ) });
-    const actions = el('div', { class: 'occ-actions' }, [check, make, more]);
-    return el('div', { class: 'occ-row' + (it.days === 0 ? ' today' : '') }, [
+    const open = el('button', { class: 'occ-open', type: 'button', 'aria-label': it.name + ' — notes, dates and cards', onclick: () => openPerson(pk, it.name) }, [
       el('div', { class: 'date-badge' }, [el('span', { text: parts.mon }), el('b', { text: String(parts.day) })]),
-      el('div', { class: 'occ-main' }, [el('div', { class: 'occ-name' }, [el('button', { class: 'name-btn', type: 'button', text: it.name, title: 'Notes and card history for ' + it.name, onclick: () => openPerson(pkey(it.name), it.name) })]), meta]),
-      actions
+      el('div', { class: 'occ-main' }, [el('div', { class: 'occ-name' }, [el('span', { class: 'name-btn', text: it.name })]), meta])
     ]);
+    return el('div', { class: 'occ-row tappable' + (it.days === 0 ? ' today' : '') }, [open, el('div', { class: 'occ-actions' }, [make])]);
   }
 
   // manual add form
@@ -2974,7 +2950,7 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     let t = null;
     notes.addEventListener('input', () => { p.notes = notes.value; clearTimeout(t); t = setTimeout(() => { savePerson(p); buildPeople(); }, 400); });
 
-    const dates = personDates(key);
+    const dates = personDates(key), upNow = upcomingItems();
     const dateList = el('div', {}, dates.map(d => {
       const occ = byId(OCCASIONS, d.occasionId) || byId(OCCASIONS, 'congrats'); const parts = AZ.parts(d.date);
       const m = d.manualId ? manual.find(x => x.id === d.manualId) : null;
@@ -2985,10 +2961,23 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
         el('span', { text: occ.label + ' · ' + parts.mon + ' ' + parts.day + (m ? ageText : ' · from your calendar') }),
         whenEl(AZ.daysBetween(AZ.today(), upcoming), 'margin-right:auto')
       ];
-      if (m) kids.push(el('div', { class: 'row', style: 'gap:6px' }, [
-        el('a', { class: 'btn quiet', href: calendarLink(p.name, occ, m.date, m.yearly), target: '_blank', rel: 'noopener', text: 'Add to Google Calendar ↗' }),
-        toolBtn('Remove', async () => { if (!await confirmSheet({ title: 'Remove this date?', message: occ.label + ', ' + AZ.pretty(m.date) + '.', okText: 'Remove' })) return; manual = manual.filter(x => x.id !== m.id); Store.set('manual', manual); buildUpcoming(false); openPerson(key); })
-      ]));
+      const acts = [];
+      if (m) acts.push(el('a', { class: 'btn quiet', href: calendarLink(p.name, occ, m.date, m.yearly), target: '_blank', rel: 'noopener', text: 'Add to Google Calendar ↗' }));
+      const now = upNow.find(i => pkey(i.name) === key && i.occasionId === d.occasionId);
+      if (now){
+        const done = !!made[now.key];
+        acts.push(toolBtn(done ? 'Undo “done”' : 'Mark done', () => {
+          if (done) delete made[now.key]; else made[now.key] = { at: new Date().toISOString() };
+          Store.set('made', made); buildUpcoming(false); buildPeople(); openPerson(key);
+        }));
+        acts.push(toolBtn('Skip this year', () => {
+          skipped[now.key] = { name: p.name, date: now.date, mode: 'once', at: new Date().toISOString() };
+          Store.set('skipped', skipped); buildUpcoming(false); buildPeople(); openPerson(key);
+          showToast('Skipped — undo under “Skipped” on Upcoming');
+        }));
+      }
+      if (m) acts.push(toolBtn('Remove', async () => { if (!await confirmSheet({ title: 'Remove this date?', message: occ.label + ', ' + AZ.pretty(m.date) + '.', okText: 'Remove' })) return; manual = manual.filter(x => x.id !== m.id); Store.set('manual', manual); buildUpcoming(false); openPerson(key); }));
+      if (acts.length) kids.push(el('div', { class: 'row', style: 'gap:6px' }, acts));
       return el('div', { class: 'skip-row', style: 'flex-wrap:wrap' }, kids);
     }));
 

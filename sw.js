@@ -2,7 +2,7 @@
 // for the versioned CDN scripts and fonts (immutable URLs), and hands-off for everything else —
 // Google sign-in, Calendar, Drive and Claude must never be served from a cache.
 // Bump CACHE together with APP_VERSION in index.html on every shell change.
-const CACHE = 'celebrate-v1.9.1';
+const CACHE = 'celebrate-v1.9.2';
 const SHELL = ['./', './index.html', './manifest.json', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png'];
 const STATIC = /^https:\/\/(cdnjs\.cloudflare\.com|fonts\.googleapis\.com|fonts\.gstatic\.com)\//;
 
