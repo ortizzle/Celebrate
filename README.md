@@ -16,13 +16,20 @@ the rest never sneak up on you. Single `index.html`, no build step, deployed on 
   access needed), then Layout, Style, Photo, Text, Colors, Stickers. 18 occasions, 8 named palettes
   with per-color fine-tuning, 4 layouts in three formats (portrait 4:5, square 1:1, landscape 16:9),
   photos with circle / arch / blob / polaroid / full-bleed masks (drag to pan, pinch to zoom) plus
-  filters and borders, solid / gradient / pattern / photo backgrounds, frames, 27 original SVG
-  stickers — every one animated (resize, rotate, flip, layer, or hold one still), free-floating text blocks, a Style tab (12 Google Fonts,
+  filters and borders, solid / gradient / pattern / photo backgrounds, frames, 37 original SVG
+  stickers — every one animated (resize, rotate, flip, layer, or hold one still), ten of them overlay
+  pieces built to be scaled up over a photo (flourishes, ribbon, badge, bokeh, light leak, wreath,
+  tape, bands, sparkles), free-floating text blocks, a Style tab (12 Google Fonts,
   size sliders, alignment, text position/spacing, auto-shrink-to-fit for long messages), undo/redo,
   named saved drafts with thumbnails, and a live preview that stays pinned in view while the editor
   below it scrolls.
-- **Share** — 1080×1350 PNG (1080×1080 square, 1600×900 landscape) via the Web Share API on
-  phones, with Download / Copy message / Email-HTML fallbacks, plus an **animated GIF** export
+- **Looks** — under Photo: six ready-made photo overlays (Golden Hour, Confetti Pop, Soft Glow,
+  Bold Banner, Wreath, Polaroid) that drop onto your photo already personalised with the name, the
+  age or years, and a short note. Every piece stays an ordinary sticker or text block afterwards.
+  Style has "Show on card" toggles (greeting, name, message, sign-off) and a text shadow (soft /
+  outline) for text over busy photos. Occasions include Encouragement and Proud of you.
+- **Share** — one "Share card" button opens a sheet with everything: system share, download, Save
+  to Drive, animated GIF, email, copy the text. Formats: 1080×1350 PNG (1080×1080 square, 1600×900 landscape), plus an **animated GIF**
   (16 frames, seamless 2.4s loop) of whatever is moving on the card. Live preview and GIF are driven
   by the same animation functions, so the GIF is exactly what you saw. Optional "Ask Claude" for a message draft. Every share,
   download or email auto-archives a snapshot under Drafts → Sent, so you always have a record of

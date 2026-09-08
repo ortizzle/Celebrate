@@ -56,7 +56,10 @@ const fs = require('fs');
   console.log('claude prompt has notes:', /marathon/.test(lastPrompt), '| message applied:', await page.evaluate(() => window.__celebrate.state().message));
 
   // ---- Download → archived with personKey + file blob ----
-  await page.getByRole('button', { name: 'Download PNG' }).click();
+  await page.getByRole('button', { name: 'Share card' }).click();
+  await page.waitForSelector('#exportOverlay:not([hidden])', { timeout: 120000 });
+  await page.click('#exportDownloadBtn');
+  await page.click('#closeExport');
   for (let i = 0; i < 40; i++){ await page.waitForTimeout(1000); if (await page.evaluate(async () => (await window.__celebrate.DB.all()).some(d => d.sent && d.personKey))) break; }
   console.log('archived:', await page.evaluate(async () => (await window.__celebrate.DB.all()).filter(d => d.sent).map(d => ({ id: d.id.slice(0, 7), personKey: d.personKey, hasFile: !!d.file, mime: d.mime }))));
 

@@ -170,7 +170,9 @@
   .cal-list .chk:last-child{ border-bottom:none; }
   .cal-list .chk span{ flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
-  .textblock{ position:absolute; max-width:92%; white-space:pre-wrap; text-align:center; line-height:1.1; touch-action:none; cursor:grab; padding:2px 6px; }
+  .card-canvas[data-shadow="soft"] .content, .card-canvas[data-shadow="soft"] .textblock{ text-shadow:0 2px 10px rgba(0,0,0,.5), 0 0 2px rgba(0,0,0,.35); }
+  .card-canvas[data-shadow="outline"] .content, .card-canvas[data-shadow="outline"] .textblock{ text-shadow:-1.5px -1.5px 0 rgba(0,0,0,.75), 1.5px -1.5px 0 rgba(0,0,0,.75), -1.5px 1.5px 0 rgba(0,0,0,.75), 1.5px 1.5px 0 rgba(0,0,0,.75); }
+  .textblock{ position:absolute; width:max-content; max-width:92%; white-space:pre-wrap; text-align:center; line-height:1.1; touch-action:none; cursor:grab; padding:2px 6px; }
   .sticker.selected, .textblock.selected{ outline:2px dashed rgba(255,255,255,.95); outline-offset:3px; border-radius:6px; box-shadow:0 0 0 2px rgba(0,0,0,.35); }
   .card-canvas.exporting .selected{ outline:none !important; box-shadow:none !important; }
 
@@ -221,6 +223,8 @@
   .sticker-pick{ position:relative; }
 
   .stage-actions{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:14px; }
+  .share-grid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px; }
+  .share-grid .wide{ grid-column:1 / -1; }
   .stage-actions .wide{ grid-column:1 / -1; }
   .btn{ min-height:48px; padding:0 16px; border-radius:12px; border:1px solid var(--paper-edge); background:var(--paper); color:var(--ink);
     font-weight:600; font-size:.92rem; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:8px; text-decoration:none; }
@@ -462,11 +466,6 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
           Share card
         </button>
-        <button class="btn ghost" id="exportBtn" type="button">Preview PNG</button>
-        <button class="btn ghost" id="downloadBtn" type="button">Download PNG</button>
-        <button class="btn ghost" id="gifBtn" type="button">Animated GIF</button>
-        <button class="btn ghost" id="copyMsgBtn" type="button">Copy message</button>
-        <button class="btn ghost" id="emailBtn" type="button">Email</button>
       </div>
     </section>
 
@@ -549,13 +548,16 @@
 <div class="overlay" id="exportOverlay" hidden>
   <div class="sheet" role="dialog" aria-label="Exported card" aria-modal="true">
     <div class="close-row"><button class="icon-btn on-paper" id="closeExport" aria-label="Close" type="button">✕</button></div>
-    <h3>Your card</h3>
+    <h3>Share your card</h3>
     <img id="exportImg" alt="Exported card">
     <p class="hint" id="exportNote"></p>
-    <div class="row">
-      <button class="btn primary" id="exportShareBtn" type="button">Share</button>
+    <div class="share-grid">
+      <button class="btn primary wide" id="exportShareBtn" type="button">Share…</button>
       <button class="btn quiet" id="exportDownloadBtn" type="button">Download</button>
       <button class="btn quiet" id="exportDriveBtn" type="button">Save to Drive</button>
+      <button class="btn quiet" id="gifBtn" type="button">Animated GIF</button>
+      <button class="btn quiet" id="emailBtn" type="button">Email</button>
+      <button class="btn quiet wide" id="copyMsgBtn" type="button">Copy the message text</button>
     </div>
   </div>
 </div>
@@ -638,7 +640,7 @@
 <script>
 (function(){
   'use strict';
-  const APP_VERSION = '1.7.0';
+  const APP_VERSION = '1.8.0';
 
   // ---------- helpers ----------
   function el(tag, attrs, kids){
@@ -732,6 +734,18 @@
     rainbow:   { label: 'Rainbow',   anim: 'clouds', svg: '<svg viewBox="0 0 100 100"><g fill="none" stroke-linecap="round"><path d="M14 74 A36 36 0 0 1 86 74" stroke="#ff5d6c" stroke-width="8"/><path d="M22 74 A28 28 0 0 1 78 74" stroke="#f2b134" stroke-width="8"/><path d="M30 74 A20 20 0 0 1 70 74" stroke="#2ec4b6" stroke-width="8"/><path d="M38 74 A12 12 0 0 1 62 74" stroke="#7c6a8e" stroke-width="8"/></g><g class="cl"><path d="M6 78 a8 8 0 0 1 8 -10 a10 10 0 0 1 18 2 a7 7 0 0 1 4 12 h-26 a6 6 0 0 1 -4 -4 z" fill="#fff" stroke="#dfe7e6" stroke-width="2"/></g><g class="cl"><path d="M64 80 a8 8 0 0 1 8 -10 a10 10 0 0 1 18 2 a7 7 0 0 1 4 12 h-26 a6 6 0 0 1 -4 -4 z" fill="#fff" stroke="#dfe7e6" stroke-width="2"/></g></svg>' },
     cheers:    { label: 'Cheers',    anim: 'cheers', svg: '<svg viewBox="0 0 100 100"><g class="gl" data-side="-1"><path d="M18 14 L38 14 L36 44 a8 8 0 0 1 -16 0 Z" fill="#fff" opacity=".4" stroke="#e6c76a" stroke-width="3" stroke-linejoin="round"/><path d="M20 22 h16 l-1.5 18 h-13 z" fill="#f2c15a"/><path d="M28 52 v28 M18 82 h20" stroke="#e6c76a" stroke-width="3.5" stroke-linecap="round"/></g><g class="gl" data-side="1"><path d="M62 14 L82 14 L80 44 a8 8 0 0 1 -16 0 Z" fill="#fff" opacity=".4" stroke="#e6c76a" stroke-width="3" stroke-linejoin="round"/><path d="M64 22 h16 l-1.5 18 h-13 z" fill="#f2c15a"/><path d="M72 52 v28 M62 82 h20" stroke="#e6c76a" stroke-width="3.5" stroke-linecap="round"/></g><g class="g"><path d="M50 4 l2 5 l5 2 l-5 2 l-2 5 l-2 -5 l-5 -2 l5 -2 z" fill="#ffd166"/></g></svg>' },
     moon:      { label: 'Moon',      anim: 'glint', svg: '<svg viewBox="0 0 100 100"><path d="M62 10 A36 36 0 1 0 90 62 A28 28 0 0 1 62 10 Z" fill="#ffe27a" stroke="#fff" stroke-width="4" paint-order="stroke"/><circle cx="40" cy="40" r="4" fill="#f2c94c" opacity=".7"/><circle cx="30" cy="62" r="3" fill="#f2c94c" opacity=".7"/><g class="g"><path d="M78 20 l2 5 l5 2 l-5 2 l-2 5 l-2 -5 l-5 -2 l5 -2 z" fill="#fff"/></g><g class="g"><path d="M88 42 l1.5 4 l4 1.5 l-4 1.5 l-1.5 4 l-1.5 -4 l-4 -1.5 l4 -1.5 z" fill="#fff"/></g><g class="g"><path d="M12 24 l1.5 4 l4 1.5 l-4 1.5 l-1.5 4 l-1.5 -4 l-4 -1.5 l4 -1.5 z" fill="#fff"/></g></svg>' }
+,
+    // ----- overlay pieces: built to be scaled up over a photo -----
+    flourish:  { label: 'Flourish',  anim: 'glint', svg: '<svg viewBox="0 0 100 100"><g fill="none" stroke="#d4af37" stroke-width="3" stroke-linecap="round"><path d="M6 6 H60 M6 6 V60"/><path d="M60 6 c14 0 20 6 20 14 s-8 12 -14 8 s0 -14 10 -10"/><path d="M6 60 c0 14 6 20 14 20 s12 -8 8 -14 s-14 0 -10 10"/><path d="M14 14 c20 6 30 16 36 36" stroke-width="2" opacity=".7"/></g><g class="g"><path d="M84 30 l1.5 4 l4 1.5 l-4 1.5 l-1.5 4 l-1.5 -4 l-4 -1.5 l4 -1.5 z" fill="#ffe9a8"/></g><g class="g"><path d="M30 84 l1.5 4 l4 1.5 l-4 1.5 l-1.5 4 l-1.5 -4 l-4 -1.5 l4 -1.5 z" fill="#ffe9a8"/></g></svg>' },
+    ribbon:    { label: 'Ribbon',    anim: 'breathe', svg: '<svg viewBox="0 0 100 100"><path d="M6 38 L18 50 L6 62 H28 V38 Z" fill="#b8901f"/><path d="M94 38 L82 50 L94 62 H72 V38 Z" fill="#b8901f"/><rect x="16" y="35" width="68" height="30" rx="3" fill="#ffd166" stroke="#fff" stroke-width="2"/><path d="M16 42 h68 M16 58 h68" stroke="#e0b13d" stroke-width="1.5" opacity=".8"/></svg>' },
+    badge:     { label: 'Badge',     anim: 'breathe', svg: '<svg viewBox="0 0 100 100"><defs><radialGradient id="bdg" cx=".4" cy=".35" r=".8"><stop offset="0" stop-color="#ffe9a8"/><stop offset="1" stop-color="#d4a63a"/></radialGradient></defs><path d="M50 4 l7 6 9 -3 3 9 9 3 -3 9 6 7 -6 7 3 9 -9 3 -3 9 -9 -3 -7 6 -7 -6 -9 3 -3 -9 -9 -3 3 -9 -6 -7 6 -7 -3 -9 9 -3 3 -9 9 3 z" fill="url(#bdg)" stroke="#fff" stroke-width="3" paint-order="stroke"/><circle cx="50" cy="50" r="30" fill="none" stroke="#fff" stroke-width="2" opacity=".8"/></svg>' },
+    bokeh:     { label: 'Bokeh',     anim: 'bokeh', svg: '<svg viewBox="0 0 100 100"><g class="k"><circle cx="24" cy="30" r="16" fill="#fff" opacity=".28"/></g><g class="k"><circle cx="66" cy="22" r="10" fill="#fff" opacity=".35"/></g><g class="k"><circle cx="78" cy="58" r="18" fill="#fff" opacity=".22"/></g><g class="k"><circle cx="40" cy="70" r="12" fill="#fff" opacity=".3"/></g><g class="k"><circle cx="58" cy="84" r="7" fill="#fff" opacity=".4"/></g><g class="k"><circle cx="14" cy="80" r="6" fill="#fff" opacity=".35"/></g></svg>' },
+    lightleak: { label: 'Light leak', anim: 'pulse', svg: '<svg viewBox="0 0 100 100"><defs><radialGradient id="llk" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffb347" stop-opacity=".75"/><stop offset=".6" stop-color="#ff5d6c" stop-opacity=".28"/><stop offset="1" stop-color="#ff5d6c" stop-opacity="0"/></radialGradient></defs><g class="p"><ellipse cx="50" cy="50" rx="50" ry="40" fill="url(#llk)"/></g></svg>' },
+    wreath:    { label: 'Wreath',    anim: 'breathe', svg: (() => { let s = ''; for (let i = 0; i < 24; i++) s += '<path d="M50 8 q6 6 0 14 q-6 -8 0 -14 z" fill="' + (i % 2 ? '#6fb36a' : '#4f8a4c') + '" transform="rotate(' + (i * 15) + ' 50 50)"/>'; return '<svg viewBox="0 0 100 100"><g class="w"><circle cx="50" cy="50" r="35" fill="none" stroke="#4f8a4c" stroke-width="2.5" opacity=".7"/>' + s + '<circle cx="50" cy="12" r="3" fill="#ff5d6c"/><circle cx="88" cy="50" r="3" fill="#ff5d6c"/><circle cx="50" cy="88" r="3" fill="#ff5d6c"/><circle cx="12" cy="50" r="3" fill="#ff5d6c"/></g></svg>'; })() },
+    tape:      { label: 'Tape',      anim: 'breathe', svg: '<svg viewBox="0 0 100 100"><path d="M6 40 L94 40 L94 60 L6 60 Z" fill="#ffd166" opacity=".85"/><path d="M6 40 l3 4 -3 4 3 4 -3 4 3 4 -3 4 M94 40 l-3 4 3 4 -3 4 3 4 -3 4 3 4" stroke="#fff" stroke-width="2" fill="none" opacity=".7"/><path d="M14 46 h72 M14 54 h72" stroke="#fff" stroke-width="1.5" opacity=".35"/></svg>' },
+    band:      { label: 'Band',      anim: 'breathe', svg: '<svg viewBox="0 0 100 100"><rect x="2" y="34" width="96" height="32" rx="6" fill="#fff" opacity=".92"/></svg>' },
+    bandDark:  { label: 'Dark band', anim: 'breathe', svg: '<svg viewBox="0 0 100 100"><rect x="2" y="34" width="96" height="32" rx="6" fill="#1c1430" opacity=".85"/></svg>' },
+    sparkles:  { label: 'Sparkles',  anim: 'glint', svg: (() => { const pts = [[14, 18, 5], [78, 12, 4], [88, 46, 6], [22, 60, 4], [60, 74, 5], [40, 88, 3.5], [70, 40, 3]]; return '<svg viewBox="0 0 100 100">' + pts.map(([x, y, r]) => '<g class="g"><path d="M' + x + ' ' + (y - r) + ' Q' + x + ' ' + y + ' ' + (x + r) + ' ' + y + ' Q' + x + ' ' + y + ' ' + x + ' ' + (y + r) + ' Q' + x + ' ' + y + ' ' + (x - r) + ' ' + y + ' Q' + x + ' ' + y + ' ' + x + ' ' + (y - r) + ' Z" fill="#fff"/></g>').join('') + '</svg>'; })() }
   };
 
   // ---------- sticker animation engine ----------
@@ -784,6 +798,9 @@
     blink(w, svg, t){ each(svg, 'l', (g, i) => { const k = .5 + .5 * S(2 * t, i * 1.3); part(g, { opacity: .35 + .65 * k, scale: 1 + .15 * k }); }); },
     rise(w, svg, t){ each(svg, 'n', (g, i) => { const u = frac(t + i * .33); part(g, { ty: -16 * u, tx: 3 * Math.sin(TAU * u), opacity: hump(u) }); }); },
     clouds(w, svg, t){ each(svg, 'cl', (g, i) => part(g, { tx: 3 * S(t, i * 2.5), ty: 1.5 * S(t, i * 1.2) })); },
+    breathe(w, svg, t){ w({ scale: 1 + .012 * S(t) }); },
+    bokeh(w, svg, t){ each(svg, 'k', (g, i) => part(g, { ty: -4 * S(t, i * 1.1), tx: 2 * S(t, i * .7 + 1), scale: 1 + .08 * S(t, i * 2), opacity: .8 + .2 * S(2 * t, i) })); },
+    pulse(w, svg, t){ each(svg, 'p', g => part(g, { scale: 1 + .06 * S(t), opacity: .85 + .15 * S(t, 1) })); },
     cheers(w, svg, t){ const k = Math.max(0, S(t)); each(svg, 'gl', g => part(g, { rot: -Number(g.dataset.side || 1) * 8 * k, oy: bottomOf(g) })); each(svg, 'g', g => part(g, { opacity: k, scale: .5 + .8 * k })); }
   };
   // Phase to freeze at for still images: some loops (burst, pop, shine) are invisible at t=0.
@@ -846,6 +863,8 @@
     { id: 'baby',         label: 'New baby',        kicker: 'Welcome, little one —', palette: 'sage',       layout: 'photo-hero',   quiet: false, stickers: ['onesie', 'heart', 'sparkle'],     starter: 'Congratulations on your new arrival. Sending so much love to your whole family.' },
     { id: 'wedding',      label: 'Wedding',         kicker: 'Congratulations,',     palette: 'rose',        layout: 'collage',      quiet: false, stickers: ['rings', 'champagne', 'heart'],    starter: 'Wishing you a lifetime of love, laughter, and adventure together.' },
     { id: 'congrats',     label: 'Congrats',        kicker: 'Congratulations,',     palette: 'champagne',   layout: 'big-name',     quiet: false, stickers: ['confetti', 'star', 'firework'],   starter: 'You earned this. So happy for you — celebrating from here!' },
+    { id: 'encourage',    label: 'Encouragement',   kicker: 'You’ve got this,',     palette: 'marigold',    layout: 'big-name',     quiet: false, stickers: ['sun', 'star', 'sparkle'],        starter: 'Whatever today brings, you already have what it takes. We’re cheering for you every step of the way.' },
+    { id: 'proud',        label: 'Proud of you',    kicker: 'So proud of you,',     palette: 'capconfetti', layout: 'big-name',     quiet: false, stickers: ['trophy', 'sparkles', 'heart'],    starter: 'Watching you work for this has been the best part. You did it, and we couldn’t be prouder.' },
     { id: 'thankyou',     label: 'Thank you',       kicker: 'Thank you,',           palette: 'sage',        layout: 'minimal-note', quiet: false, stickers: ['heart', 'sparkle'],               starter: 'We’re so grateful for you. Thank you for everything you do.' },
     { id: 'getwell',      label: 'Get well',        kicker: 'Thinking of you,',     palette: 'harbor',      layout: 'minimal-note', quiet: true,  stickers: ['sun', 'heart'],                   starter: 'Sending healing thoughts your way. Rest up — we’re cheering for a fast recovery.' },
     { id: 'thinking',     label: 'Thinking of you', kicker: 'Thinking of you,',     palette: 'harbor',      layout: 'minimal-note', quiet: true,  stickers: ['heart', 'sun'],                   starter: 'Just a note to say you’ve been on our minds. We’re here whenever you need us.' },
@@ -932,7 +951,8 @@
   const COLOR_KEYS = [['ink', 'Ink'], ['a0', 'Accent 1'], ['a1', 'Accent 2'], ['a2', 'Accent 3'], ['paper', 'Paper'], ['white', 'White']];
 
   const uid = () => 'u' + Math.random().toString(36).slice(2, 9);
-  function defaultStyle(){ return { display: 'baloo', body: 'jakarta', hand: 'caveat', sizes: { kicker: 1, name: 1, message: 1, from: 1 }, align: 'auto', vpos: 'auto', space: 'normal', color: 'ink', customColor: '#ffffff' }; }
+  const SHOW_ALL = () => ({ kicker: true, name: true, message: true, from: true });
+  function defaultStyle(){ return { display: 'baloo', body: 'jakarta', hand: 'caveat', sizes: { kicker: 1, name: 1, message: 1, from: 1 }, align: 'auto', vpos: 'auto', space: 'normal', color: 'ink', customColor: '#ffffff', shadow: 'none', show: SHOW_ALL() }; }
   function defaultBackground(){ return { type: 'solid', angle: 135, color2: 'a0', pattern: 'dots', photo: null, scrim: .35 }; }
   function seedStickers(occ){
     return occ.stickers.map((sid, i) => ({ uid: uid(), stickerId: sid, x: [18, 82, 84][i], y: [14, 12, 86][i], rot: [-8, 10, -4][i], scale: [1, .95, .85][i], flip: false }));
@@ -954,6 +974,8 @@
     if (!Array.isArray(out.photos) || out.photos.length < 3) out.photos = [out.photos?.[0] || null, out.photos?.[1] || null, null];
     out.style = Object.assign(defaultStyle(), out.style || {});
     out.style.sizes = Object.assign({ kicker: 1, name: 1, message: 1, from: 1 }, out.style.sizes || {});
+    out.style.show = Object.assign(SHOW_ALL(), out.style.show || {});
+    if (!['none', 'soft', 'outline'].includes(out.style.shadow)) out.style.shadow = 'none';
     out.texts = Array.isArray(out.texts) ? out.texts : [];
     out.stickers = (Array.isArray(out.stickers) ? out.stickers : []).map(s => Object.assign({ flip: false, uid: uid() }, s));
     out.colors = out.colors || {};
@@ -1348,14 +1370,17 @@
     }
 
     const scrim = layout.id === 'collage';
-    cardContent.appendChild(el('div', { class: 'kicker', text: occ.kicker }));
-    cardContent.appendChild(el('div', { class: 'name', text: state.name.trim() || 'Someone wonderful' }));
-    if (layout.id === 'minimal-note' || layout.id === 'photo-hero') cardContent.appendChild(el('div', { class: 'rule', style: 'background:' + (scrim ? '#fff' : pal.accents[0]) }));
-    cardContent.appendChild(el('div', { class: 'message', text: state.message }));
-    cardContent.appendChild(el('div', { class: 'from', text: state.from }));
+    const show = st.show || SHOW_ALL();
+    if (st.shadow && st.shadow !== 'none') cardCanvas.dataset.shadow = st.shadow; else cardCanvas.removeAttribute('data-shadow');
+    if (show.kicker) cardContent.appendChild(el('div', { class: 'kicker', text: occ.kicker }));
+    if (show.name) cardContent.appendChild(el('div', { class: 'name', text: state.name.trim() || 'Someone wonderful' }));
+    if ((layout.id === 'minimal-note' || layout.id === 'photo-hero') && show.name && show.message) cardContent.appendChild(el('div', { class: 'rule', style: 'background:' + (scrim ? '#fff' : pal.accents[0]) }));
+    if (show.message) cardContent.appendChild(el('div', { class: 'message', text: state.message }));
+    if (show.from) cardContent.appendChild(el('div', { class: 'from', text: state.from }));
 
-    state.texts.forEach(t => cardCanvas.appendChild(makeTextEl(t, pal)));
+    // Stickers first, then text blocks: a name on a ribbon or an age on a badge must sit on top.
     state.stickers.forEach(rec => { if (STICKERS[rec.stickerId]) cardCanvas.appendChild(makeStickerEl(rec)); });
+    state.texts.forEach(t => cardCanvas.appendChild(makeTextEl(t, pal)));
     if (state.frame !== 'none'){
       const fr = el('div', { class: 'frame ' + state.frame, 'aria-hidden': 'true' });
       if (state.frame === 'corners') for (let i = 0; i < 4; i++) fr.appendChild(el('i'));
@@ -1460,7 +1485,7 @@
     if (opts.name !== undefined) state.name = opts.name;
     state.sourceKey = opts.sourceKey || null;
     if (opts.person){ state.personKey = opts.person.key; state.personName = opts.person.name; }
-    state.count = opts.count || null;
+    state.count = opts.count || null; state.lookId = null;
     state.texts = state.texts.filter(t => !t.auto);
     if (isMilestone(occ.id, state.count)){
       const big = occ.id === 'birthday';
@@ -1496,7 +1521,8 @@
         ]));
       }
       p.appendChild(el('div', { class: 'row', style: 'margin-top:14px' }, [
-        el('button', { class: 'btn primary', type: 'button', text: last ? '✨ Auto-design — different from last time' : '✨ Auto-design this card', onclick: (e) => autoDesign(e.currentTarget) })
+        el('button', { class: 'btn primary', type: 'button', text: last ? '✨ Auto-design — different from last time' : '✨ Auto-design this card', onclick: (e) => autoDesign(e.currentTarget) }),
+        el('button', { class: 'btn quiet', type: 'button', text: '📷 Photo looks', onclick: () => selectTab('Photo') })
       ]));
       p.appendChild(el('p', { class: 'hint', text: (last ? 'Claude sees last time’s palette, layout and message and steers away from them. ' : '') + 'It picks a palette, layout, fonts, stickers and message — it never sees your photos.', style: 'margin-top:8px' }));
       return;
@@ -1578,6 +1604,13 @@
     p.appendChild(lbl('Spacing'));
     p.appendChild(chipRow([['compact', 'Compact'], ['normal', 'Normal'], ['airy', 'Airy']], st.space || 'normal', (id) => { st.space = id; render(); touch(); buildStylePanel(); }));
     p.appendChild(el('p', { class: 'hint', text: 'Long messages shrink automatically to fit the card. Compact spacing and a smaller Message size give it more room.', style: 'margin-top:8px' }));
+    p.appendChild(lbl('Show on card'));
+    const showRow = el('div', { class: 'row' });
+    [['kicker', 'Greeting'], ['name', 'Name'], ['message', 'Message'], ['from', 'Sign-off']].forEach(([k, label]) => showRow.appendChild(el('button', { class: 'chip sm', type: 'button', text: label, 'aria-pressed': st.show[k] ? 'true' : 'false', onclick: () => { st.show[k] = !st.show[k]; render(); touch(); buildStylePanel(); } })));
+    p.appendChild(showRow);
+    p.appendChild(lbl('Text shadow'));
+    p.appendChild(chipRow([['none', 'None'], ['soft', 'Soft'], ['outline', 'Outline']], st.shadow || 'none', (id) => { st.shadow = id; render(); touch(); buildStylePanel(); }));
+    p.appendChild(el('p', { class: 'hint', text: 'Soft or Outline keeps text readable over a busy photo.', style: 'margin-top:6px' }));
     p.appendChild(lbl('Text color'));
     p.appendChild(colorDots(st.color, (k, v) => { st.color = k; if (v) st.customColor = v; render(); touch(); buildStylePanel(); }, currentPalette()));
     p.appendChild(el('div', { class: 'row', style: 'margin-top:14px' }, [toolBtn('Reset style', () => { state.style = defaultStyle(); render(); touch(); buildStylePanel(); })]));
@@ -1721,18 +1754,118 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     return box;
   }
 
+  // ---------- looks: a photo plus a ready-made overlay, personalised ----------
+  // A look is a recipe, not a picture: it sets the palette, fonts, what the card text shows, and
+  // drops overlay pieces (stickers) and text blocks filled from the person — name, age, a note —
+  // so a finished-feeling card is one tap away and every piece stays editable afterwards.
+  const LOOK_TEXT = { rot: 0, font: 'display', color: 'white', customColor: '#ffffff' };
+  const LOOKS = [
+    { id: 'golden', name: 'Golden Hour', desc: 'Gilt corners, ribbon name, badge age', needs: 'bg', palette: 'champagne', fonts: { display: 'fraunces', body: 'lora', hand: 'dancing' }, scrim: .35, shadow: 'soft', note: 'Shine on',
+      stickers: () => [{ stickerId: 'flourish', x: 13, y: 11, scale: 2 }, { stickerId: 'flourish', x: 87, y: 11, scale: 2, flip: true }, { stickerId: 'flourish', x: 13, y: 89, scale: 2, rot: -90 }, { stickerId: 'flourish', x: 87, y: 89, scale: 2, rot: 180 }, { stickerId: 'sparkles', x: 50, y: 45, scale: 5 }, { stickerId: 'ribbon', x: 50, y: 70, scale: 5.6 }],
+      texts: (c) => [{ text: c.name, x: 50, y: 70, size: 9, color: 'custom', customColor: '#4a3620' }, { text: c.note, x: 50, y: 82, size: 6.5, font: 'hand' }].concat(c.count ? [{ text: String(c.count), x: 82, y: 20, size: 9, color: 'custom', customColor: '#4a3620' }] : []),
+      extra: (c) => c.count ? [{ stickerId: 'badge', x: 82, y: 20, scale: 1.7 }] : [] },
+    { id: 'confetti', name: 'Confetti Pop', desc: 'Big name, big number, party pieces', needs: 'bg', palette: 'marigold', fonts: { display: 'baloo', body: 'nunito', hand: 'caveat' }, scrim: .3, shadow: 'soft', note: 'Best day ever',
+      stickers: () => [{ stickerId: 'confetti', x: 18, y: 18, scale: 3.6 }, { stickerId: 'confetti', x: 84, y: 60, scale: 3.2, flip: true }, { stickerId: 'streamers', x: 50, y: 6, scale: 4.5 }, { stickerId: 'popper', x: 14, y: 86, scale: 2.4 }, { stickerId: 'band', x: 50, y: 68, scale: 5.6 }],
+      texts: (c) => [{ text: c.name, x: 50, y: 68, size: 11, color: 'a0' }, { text: c.note, x: 50, y: 81, size: 6.5, font: 'hand' }].concat(c.count ? [{ text: c.count + '!', x: 82, y: 20, size: 16, rot: -12 }] : []) },
+    { id: 'glow', name: 'Soft Glow', desc: 'Bokeh, a light leak, handwritten note', needs: 'bg', palette: 'rose', fonts: { display: 'pacifico', body: 'lora', hand: 'dancing' }, scrim: .3, shadow: 'soft', note: 'So loved',
+      stickers: () => [{ stickerId: 'bokeh', x: 26, y: 30, scale: 5 }, { stickerId: 'bokeh', x: 76, y: 72, scale: 5, flip: true }, { stickerId: 'lightleak', x: 80, y: 14, scale: 6 }, { stickerId: 'sparkles', x: 50, y: 50, scale: 5.2 }],
+      texts: (c) => [{ text: c.name, x: 50, y: 66, size: 12 }, { text: c.note, x: 50, y: 78, size: 6.5, font: 'hand' }].concat(c.count ? [{ text: c.count + '!', x: 84, y: 22, size: 10, font: 'hand' }] : []) },
+    { id: 'bold', name: 'Bold Banner', desc: 'Dark band, tall type, number up top', needs: 'bg', palette: 'ember', fonts: { display: 'bebas', body: 'nunito', hand: 'kalam' }, scrim: .25, shadow: 'none', note: 'Here’s to you',
+      stickers: () => [{ stickerId: 'bandDark', x: 50, y: 70, scale: 5.8 }],
+      texts: (c) => [{ text: c.name.toUpperCase(), x: 50, y: 70, size: 14, color: 'a1' }, { text: c.note, x: 50, y: 82, size: 7, font: 'body' }].concat(c.count ? [{ text: String(c.count), x: 16, y: 16, size: 22, color: 'a0' }] : []) },
+    { id: 'wreath', name: 'Wreath', desc: 'Name in a leafy ring over the photo', needs: 'bg', palette: 'sage', fonts: { display: 'fraunces', body: 'lora', hand: 'caveat' }, scrim: .45, shadow: 'soft', note: 'Grow wild',
+      stickers: () => [{ stickerId: 'wreath', x: 50, y: 46, scale: 5.2 }],
+      texts: (c) => [{ text: c.name, x: 50, y: 44, size: 10 }, { text: c.note, x: 50, y: 82, size: 6.5, font: 'hand' }].concat(c.count ? [{ text: c.countLabel, x: 50, y: 54, size: 6, font: 'hand' }] : []) },
+    { id: 'polaroid', name: 'Polaroid', desc: 'Taped snapshot, handwritten message', needs: 'slot', palette: 'sage', fonts: { display: 'caveat', body: 'kalam', hand: 'caveat' }, shadow: 'none', note: '',
+      stickers: () => [{ stickerId: 'tape', x: 30, y: 6, scale: 1.6, rot: -18 }, { stickerId: 'tape', x: 72, y: 7, scale: 1.6, rot: 14 }],
+      texts: (c) => c.count ? [{ text: c.count + '!', x: 86, y: 50, size: 12, rot: -10, color: 'a0' }] : [] }
+  ];
+  let pendingLook = null;
+  function lookContext(){
+    return { name: state.name.trim() || 'Someone wonderful', count: state.count || null, countLabel: state.count ? countLabel(state.occasionId, state.count) : '' };
+  }
+  function applyLook(id){
+    const look = byId(LOOKS, id); if (!look) return;
+    const c = lookContext(); c.note = look.note;
+    if (look.needs === 'slot'){
+      state.layoutId = 'photo-hero';
+      if (state.photos[0]) state.photos[0].mask = 'polaroid';
+      if (state.background.type === 'photo') state.background.type = 'solid';
+      state.style.show = { kicker: true, name: true, message: true, from: true };
+      state.style.vpos = 'auto'; state.style.align = 'auto'; state.style.color = 'ink';
+    } else {
+      state.layoutId = 'big-name';
+      state.background.type = 'photo'; state.background.scrim = look.scrim;
+      // The look's note replaces the long message; turn the message back on under Style › Show on card.
+      state.style.show = { kicker: false, name: false, message: false, from: true };
+      state.style.vpos = 'bottom'; state.style.align = 'center'; state.style.color = 'white'; state.style.space = 'compact';
+      state.style.sizes = Object.assign(state.style.sizes, { message: .8, from: .9 });
+    }
+    state.paletteId = look.palette; state.colors = {}; state.frame = 'none';
+    Object.assign(state.style, look.fonts, { shadow: look.shadow });
+    state.stickers = look.stickers(c).concat(look.extra ? look.extra(c) : []).map(s => Object.assign({ uid: uid(), rot: 0, scale: 1, flip: false, look: true }, s));
+    state.texts = state.texts.filter(t => !t.look && !t.auto).concat(look.texts(c).map(t => Object.assign({ uid: uid(), look: true }, LOOK_TEXT, t)));
+    state.lookId = id;
+    Promise.all(Object.values(look.fonts).map((fid, i) => loadFont(fontDef(['display', 'body', 'hand'][i], fid)))).then(render);
+    selected = null; touch(); buildAll();
+    showToast(look.name + ' — tap any piece or text to change it');
+  }
+  // A look needs a photo first; if there isn't one, ask for it and apply once it lands.
+  function startLook(id){
+    const look = byId(LOOKS, id);
+    const has = look.needs === 'slot' ? !!state.photos[0] : !!state.background.photo;
+    if (has){ applyLook(id); return; }
+    pendingLook = id; $('lookPhotoIn').click();
+  }
+  function buildLooksSection(p){
+    p.appendChild(lbl('Looks', 'margin:0 0 6px'));
+    p.appendChild(el('p', { class: 'hint', text: 'A photo plus a ready-made overlay — name, age and a note filled in for you. Every piece stays editable.', style: 'margin-bottom:8px' }));
+    const grid = el('div', { class: 'chip-grid' });
+    LOOKS.forEach(l => grid.appendChild(el('button', { class: 'chip', type: 'button', 'aria-pressed': state.lookId === l.id ? 'true' : 'false', onclick: () => startLook(l.id) }, [el('span', { text: l.name }), el('small', { text: l.desc })])));
+    p.appendChild(grid);
+    const input = el('input', { type: 'file', accept: 'image/*', id: 'lookPhotoIn', class: 'sr-only', 'aria-label': 'Photo for this look' });
+    input.addEventListener('change', () => {
+      const file = input.files[0]; if (!file || !pendingLook) return;
+      const id = pendingLook; pendingLook = null;
+      importPhoto(file, (dataUrl) => {
+        const look = byId(LOOKS, id);
+        if (look.needs === 'slot') state.photos[0] = { id: 'p' + Date.now(), dataUrl, mask: 'polaroid', fx: .5, fy: .5, scale: 1, filter: 'none', border: 'none' };
+        else state.background.photo = { id: 'pbg' + Date.now(), dataUrl, mask: 'full-bleed', fx: .5, fy: .5, scale: 1, filter: 'none', border: 'none' };
+        applyLook(id);
+      });
+    });
+    p.appendChild(input);
+  }
+  function bgPhotoSection(p){
+    const b = state.background;
+    p.appendChild(lbl('Background photo'));
+    p.appendChild(photoPicker('photoInBgP', !!b.photo, (dataUrl) => {
+      b.photo = { id: 'pbg' + Date.now(), dataUrl, mask: 'full-bleed', fx: .5, fy: .5, scale: 1, filter: b.photo ? b.photo.filter : 'none', border: 'none' };
+      b.type = 'photo'; if (state.style.color === 'ink') state.style.color = 'white';
+      touch(); buildAll();
+    }));
+    if (b.photo && b.type === 'photo'){
+      const range = el('input', { type: 'range', min: '0', max: '0.8', step: '0.05', value: String(b.scrim), 'aria-label': 'Darken photo' });
+      range.addEventListener('input', () => { b.scrim = Number(range.value); render(); touch(); });
+      p.appendChild(el('div', { class: 'range-row', style: 'margin-top:8px' }, [el('span', { text: 'Darken' }), range]));
+      p.appendChild(el('p', { class: 'hint', text: 'Drag on the card to reposition, pinch to zoom. Photos never leave this phone.', style: 'margin-top:6px' }));
+    }
+  }
+
   function buildPhotoPanel(){
     const p = $('panelPhoto'); p.textContent = '';
     const layout = currentLayout();
+    buildLooksSection(p);
     if (layout.photoSlots === 0){
-      p.appendChild(el('p', { class: 'hint', text: 'This layout is text-only. Pick Photo Hero or Collage under Layout to add photos, or use a photo as the background under Colors.' }));
-      p.appendChild(el('div', { class: 'row', style: 'margin-top:10px' }, [
-        toolBtn('Switch to Photo Hero', () => { state.layoutId = 'photo-hero'; touch(); buildAll(); }),
-        toolBtn('Switch to Collage', () => { state.layoutId = 'collage'; touch(); buildAll(); }),
-        toolBtn('Photo background', () => { state.background.type = 'photo'; touch(); buildAll(); selectTab('Colors'); })
+      bgPhotoSection(p);
+      p.appendChild(lbl('Or a photo layout'));
+      p.appendChild(el('div', { class: 'row' }, [
+        toolBtn('Photo Hero', () => { state.layoutId = 'photo-hero'; touch(); buildAll(); }),
+        toolBtn('Collage', () => { state.layoutId = 'collage'; touch(); buildAll(); })
       ]));
       return;
     }
+    p.appendChild(lbl('Photos'));
     p.appendChild(el('p', { class: 'hint', text: 'Photos never leave this phone. Drag on the card to reposition, pinch to zoom.', style: 'margin-bottom:12px' }));
     for (let i = 0; i < layout.photoSlots; i++){
       const photo = state.photos[i];
@@ -1766,7 +1899,9 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
       p.appendChild(grid);
     };
     section('Suggested for ' + occ.label, [...new Set(occ.stickers)]);
-    section('All stickers', Object.keys(STICKERS));
+    const OVERLAY_IDS = ['flourish', 'ribbon', 'badge', 'bokeh', 'lightleak', 'wreath', 'tape', 'band', 'bandDark', 'sparkles'];
+    section('All stickers', Object.keys(STICKERS).filter(id => !OVERLAY_IDS.includes(id)));
+    section('Overlay pieces — scale them up over a photo', OVERLAY_IDS);
     if (state.stickers.length) p.appendChild(toolBtn('Clear all stickers', () => { state.stickers = []; selected = null; touch(); render(); renderSelBar(); buildStickersPanel(); }));
   }
 
@@ -2040,17 +2175,12 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
   // Share/Download buttons send the right file instead of always assuming a PNG.
   let exportState = null;
   function openExportPreview(es, note){
+    if (exportState && exportState.blob !== es.blob && $('exportImg').src.startsWith('blob:')) URL.revokeObjectURL($('exportImg').src);
     exportState = es;
     $('exportImg').src = URL.createObjectURL(es.blob);
     $('exportNote').textContent = note;
     exportOverlay.hidden = false;
   }
-
-  $('exportBtn').addEventListener('click', () => withBusy($('exportBtn'), 'Rendering…', async () => {
-    const blob = await renderPng();
-    openExportPreview({ blob, filename: 'celebrate-card.png', mime: 'image/png' }, 'Long-press the image to save it, or use Share / Download.');
-    markMade();
-  }));
 
   async function shareBlob(blob, filename, mime, text){
     const file = new File([blob], filename, { type: mime });
@@ -2060,17 +2190,13 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     try { await navigator.share(payload); return 'shared'; }
     catch (e) { return e && e.name === 'AbortError' ? 'cancelled' : 'blocked'; }
   }
-  async function doShare(btn){
-    await withBusy(btn, 'Preparing…', async () => {
-      const blob = await ensureBlob();
-      const es = { blob, filename: 'celebrate-card.png', mime: 'image/png' };
-      const r = await shareBlob(blob, es.filename, es.mime);
-      if (r === 'shared') { showToast('Shared'); markMade(); archiveSent('Share', blob); }
-      else if (r === 'unsupported') { showToast('Sharing files isn’t available here — use Download or Copy message'); openExportPreview(es, 'Long-press the image to save it.'); }
-      else if (r === 'blocked') openExportPreview(es, 'Card is ready — tap Share once more to open the share sheet.');
-    });
-  }
-  $('shareBtn').addEventListener('click', () => doShare($('shareBtn')));
+  // One door out: render once, then every way to send it lives on the sheet.
+  const PNG_NOTE = 'Share opens your phone’s share sheet — Messages, WhatsApp, Gmail and the rest. Long-press the image to save it.';
+  $('shareBtn').addEventListener('click', () => withBusy($('shareBtn'), 'Rendering…', async () => {
+    const blob = await ensureBlob();
+    openExportPreview({ blob, filename: 'celebrate-card.png', mime: 'image/png' }, PNG_NOTE);
+    $('gifBtn').textContent = 'Animated GIF';
+  }));
   $('exportShareBtn').addEventListener('click', () => withBusy($('exportShareBtn'), 'Preparing…', async () => {
     if (!exportState) return;
     const isGif = exportState.mime === 'image/gif';
@@ -2085,11 +2211,6 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     a.href = URL.createObjectURL(blob); a.download = filename;
     document.body.appendChild(a); a.click(); a.remove();
   }
-  $('downloadBtn').addEventListener('click', () => withBusy($('downloadBtn'), 'Rendering…', async () => {
-    const blob = await ensureBlob();
-    downloadBlob(blob, 'celebrate-card.png');
-    markMade(); archiveSent('Download', blob);
-  }));
   $('exportDownloadBtn').addEventListener('click', () => {
     if (!exportState) return;
     downloadBlob(exportState.blob, exportState.filename);
@@ -2103,10 +2224,15 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     await saveToDrive(rec, $('exportDriveBtn'));
   });
   $('gifBtn').addEventListener('click', () => withBusy($('gifBtn'), 'Making GIF…', async () => {
+    if (exportState && exportState.mime === 'image/gif'){
+      openExportPreview({ blob: await ensureBlob(), filename: 'celebrate-card.png', mime: 'image/png' }, PNG_NOTE);
+      $('gifBtn').textContent = 'Animated GIF';
+      return;
+    }
     const blob = await renderGif();
     if (!blob) return;
-    openExportPreview({ blob, filename: 'celebrate-card.gif', mime: 'image/gif' }, 'Long-press the GIF to save it, or use Share / Download.');
-    markMade(); archiveSent('GIF', blob);
+    openExportPreview({ blob, filename: 'celebrate-card.gif', mime: 'image/gif' }, 'This is the GIF — Share and Download now send the moving version. Long-press to save it.');
+    $('gifBtn').textContent = 'Use the PNG instead';
   }));
 
   $('copyMsgBtn').addEventListener('click', async () => {
@@ -3016,7 +3142,7 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     let hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) showToast('Celebrate updated — reload to get the new version', 6000); hadController = true; });
   }
-  window.__celebrate = { state: () => state, upcomingItems, extractName, matchKeyword, PALETTES, OCCASIONS, DB, undo, redo, skipped: () => skipped, people: () => people, aliases: () => aliases, cardIndex: () => cardIndex, openPerson, STICKERS, ANIMS, applyAllAnims, buildAll, lastCardFor, storageSummary, pruneOldImages, isMilestone, countLabel, setToken: (t) => { token = t; } };
+  window.__celebrate = { state: () => state, upcomingItems, extractName, matchKeyword, PALETTES, OCCASIONS, DB, undo, redo, skipped: () => skipped, people: () => people, aliases: () => aliases, cardIndex: () => cardIndex, openPerson, STICKERS, ANIMS, applyAllAnims, buildAll, LOOKS, applyLook, lastCardFor, storageSummary, pruneOldImages, isMilestone, countLabel, setToken: (t) => { token = t; } };
 })();
 </script>
 </body>

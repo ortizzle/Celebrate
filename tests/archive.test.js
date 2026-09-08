@@ -20,7 +20,10 @@ const fs = require('fs');
 
   // download -> auto-archived to Sent
   await page.mouse.wheel(0, -700);
-  await page.getByRole('button', { name: 'Download PNG' }).click();
+  await page.getByRole('button', { name: 'Share card' }).click();
+  await page.waitForSelector('#exportOverlay:not([hidden])', { timeout: 120000 });
+  await page.click('#exportDownloadBtn');
+  await page.click('#closeExport');
   for (let i = 0; i < 40; i++){ await page.waitForTimeout(1000); if (await page.evaluate(async () => (await window.__celebrate.DB.all()).some(d => d.sent))) break; }
   const sentCount = await page.evaluate(async () => (await window.__celebrate.DB.all()).filter(d => d.sent).length);
   console.log('sent entries after download:', sentCount);

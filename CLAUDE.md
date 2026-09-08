@@ -37,6 +37,13 @@ attribute**. Every animation in `ANIMS` is a pure function of loop phase t∈[0,
 the live preview and the 16-frame GIF sample the same function. Parts move through the SVG
 `transform` attribute because html2canvas rasterises SVG by serialising it.
 
+## Looks
+
+`LOOKS` are recipes, not pictures: each sets palette, fonts, `style.show` flags, `style.shadow`,
+and drops overlay stickers plus `look:true` text blocks filled from the person (name, `state.count`,
+a note). `applyLook` replaces all stickers and look/auto texts, keeps user text blocks. Photo looks
+hide the message (the note stands in) and put the sign-off at the bottom.
+
 ## Tests
 
 `tests/run.sh` runs every `tests/*.test.js` (Playwright, headless) against a local static server.

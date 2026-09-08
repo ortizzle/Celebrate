@@ -54,15 +54,15 @@ const fs = require('fs');
 
   // 5. PNG export still works with all stickers
   const t0 = Date.now();
-  await page.getByRole('button', { name: 'Preview PNG' }).click();
+  await page.getByRole('button', { name: 'Share card' }).click();
   await page.waitForSelector('#exportOverlay:not([hidden])', { timeout: 120000 });
   console.log('5 png export in', ((Date.now() - t0) / 1000).toFixed(1) + 's', '| img:', await page.evaluate(async () => { const r = await fetch(document.getElementById('exportImg').src); const b = await r.blob(); return b.type + ' ' + b.size; }));
-  await page.click('#closeExport');
+  console.log('   share sheet buttons:', await page.locator('#exportOverlay .share-grid button').allTextContents());
 
   // 6. GIF export: 16 frames, loops
   const t1 = Date.now();
-  await page.getByRole('button', { name: 'Animated GIF' }).click();
-  await page.waitForSelector('#exportOverlay:not([hidden])', { timeout: 300000 });
+  await page.click('#gifBtn');
+  for (let i = 0; i < 300; i++){ await page.waitForTimeout(1000); if (await page.evaluate(() => document.getElementById('gifBtn').textContent === 'Use the PNG instead')) break; }
   console.log('6 gif export in', ((Date.now() - t1) / 1000).toFixed(1) + 's', await page.evaluate(async () => {
     const r = await fetch(document.getElementById('exportImg').src); const buf = new Uint8Array(await r.arrayBuffer());
     let frames = 0; for (let i = 0; i < buf.length - 2; i++) if (buf[i] === 0x21 && buf[i + 1] === 0xF9 && buf[i + 2] === 0x04) frames++;
