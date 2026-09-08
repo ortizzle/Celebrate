@@ -44,9 +44,19 @@ and drops overlay stickers plus `look:true` text blocks filled from the person (
 a note). `applyLook` replaces all stickers and look/auto texts, keeps user text blocks. Photo looks
 hide the message (the note stands in) and put the sign-off at the bottom.
 
+## Navigation and reversibility
+
+Every `.overlay` and the editor view maps to a history entry (`syncNav`, a MutationObserver on the
+`hidden` attribute); `popstate` closes the topmost sheet, then leaves the editor. Never open or
+close an overlay outside a `.overlay` element or the stack drifts.
+
+`setLayout(id)` is the only way the layout changes: it carries the photo (`carryPhoto`) so one never
+vanishes, clears an active look (`clearLook`, restoring `show` flags), and offers `toastUndo`.
+Any single tap that rearranges the card must offer `toastUndo` with a `snapshot()` taken first.
+
 ## Tests
 
 `tests/run.sh` runs every `tests/*.test.js` (Playwright, headless) against a local static server.
 Run them before pushing; they cover calendar picking, people/remove/merge/backup, drafts and
-archive, the editor workflow, stickers and GIF export, the service worker, and year-over-year
-features. Each prints its checks and ends with `errors: none`.
+archive, the editor workflow, stickers and GIF export, looks, Back-button navigation and undo,
+the service worker, and year-over-year features. Each prints its checks and ends with `errors: none`.

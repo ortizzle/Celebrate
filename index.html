@@ -328,6 +328,9 @@
 
   .toast-region{ position:fixed; left:0; right:0; bottom:calc(env(safe-area-inset-bottom) + 16px); display:flex; flex-direction:column; align-items:center; gap:8px; pointer-events:none; z-index:80; padding:0 14px; }
   .toast{ background:var(--ink); color:var(--paper); padding:10px 16px; border-radius:999px; font-size:.88rem; box-shadow:0 8px 20px rgba(0,0,0,.3); max-width:100%; text-align:center; }
+  .toast.with-action{ display:flex; align-items:center; gap:10px; text-align:left; pointer-events:auto; padding:4px 4px 4px 16px; }
+  .toast.with-action span{ flex:1; }
+  .toast-btn{ min-height:48px; padding:0 16px; border-radius:999px; border:none; background:var(--accent); color:var(--accent-ink); font:inherit; font-weight:700; cursor:pointer; flex:none; }
 
   .overlay{ position:fixed; inset:0; background:rgba(0,0,0,.6); display:flex; align-items:center; justify-content:center; padding:20px; z-index:90; }
   .sheet{ background:var(--paper); color:var(--ink); border-radius:20px; padding:20px; max-width:440px; width:100%; max-height:86vh; overflow:auto; }
@@ -640,7 +643,7 @@
 <script>
 (function(){
   'use strict';
-  const APP_VERSION = '1.8.0';
+  const APP_VERSION = '1.9.0';
 
   // ---------- helpers ----------
   function el(tag, attrs, kids){
@@ -677,6 +680,16 @@
 
   function showToast(msg, ms = 3200){
     const t = el('div', { class: 'toast', text: msg });
+    $('toastRegion').appendChild(t);
+    setTimeout(() => t.remove(), ms);
+  }
+  // Anything that rearranges the card in one tap says so and offers the way back, right there —
+  // Undo buttons in a panel header are not where you look when something surprising just happened.
+  function toastUndo(msg, undoFn, ms = 7000){
+    const t = el('div', { class: 'toast with-action' }, [
+      el('span', { text: msg }),
+      el('button', { class: 'toast-btn', type: 'button', text: 'Undo', onclick: () => { t.remove(); undoFn(); } })
+    ]);
     $('toastRegion').appendChild(t);
     setTimeout(() => t.remove(), ms);
   }
@@ -1086,8 +1099,34 @@
     if (which === 'maker') { render(); drawAllCanvases(); kickAnim(); }
     if (which === 'people') buildPeople();
     if (which === 'upcoming') buildUpcoming(false);
+    syncNav();
     window.scrollTo({ top: 0 });
   }
+  // On Android, Back is how you go back. Without this it walks out of the app from the first sheet,
+  // so each open overlay — and the editor itself — gets a history entry that Back consumes.
+  let navDepth = 0, navBusy = null;
+  const openLayers = () => [...document.querySelectorAll('.overlay')].filter(o => !o.hidden);
+  function syncNav(){
+    if (navBusy) return;
+    const want = openLayers().length + ($('viewMaker').hidden ? 0 : 1);
+    if (want > navDepth){ while (navDepth < want){ navDepth++; history.pushState({ celebrate: navDepth }, ''); } }
+    else if (want < navDepth){
+      const back = navDepth - want; navDepth = want;
+      navBusy = setTimeout(() => { navBusy = null; }, 400);
+      history.go(-back);
+    }
+  }
+  window.addEventListener('popstate', () => {
+    if (navBusy){ clearTimeout(navBusy); navBusy = null; return; }
+    navDepth = Math.max(0, navDepth - 1);
+    const open = openLayers();
+    if (open.length){ open[open.length - 1].hidden = true; return; }
+    if (!$('viewMaker').hidden) showView('upcoming');
+  });
+  (() => {
+    const obs = new MutationObserver(() => syncNav());
+    document.querySelectorAll('.overlay').forEach(o => obs.observe(o, { attributes: true, attributeFilter: ['hidden'] }));
+  })();
   $('navUpcoming').addEventListener('click', () => showView('upcoming'));
   $('navPeople').addEventListener('click', () => showView('people'));
   $('navMaker').addEventListener('click', () => showView('maker'));
@@ -1608,6 +1647,7 @@
     const showRow = el('div', { class: 'row' });
     [['kicker', 'Greeting'], ['name', 'Name'], ['message', 'Message'], ['from', 'Sign-off']].forEach(([k, label]) => showRow.appendChild(el('button', { class: 'chip sm', type: 'button', text: label, 'aria-pressed': st.show[k] ? 'true' : 'false', onclick: () => { st.show[k] = !st.show[k]; render(); touch(); buildStylePanel(); } })));
     p.appendChild(showRow);
+    if (!st.show.kicker || !st.show.name || !st.show.message || !st.show.from) p.appendChild(el('div', { class: 'row', style: 'margin-top:8px' }, [toolBtn('Show everything', () => { st.show = SHOW_ALL(); render(); touch(); buildStylePanel(); })]));
     p.appendChild(lbl('Text shadow'));
     p.appendChild(chipRow([['none', 'None'], ['soft', 'Soft'], ['outline', 'Outline']], st.shadow || 'none', (id) => { st.shadow = id; render(); touch(); buildStylePanel(); }));
     p.appendChild(el('p', { class: 'hint', text: 'Soft or Outline keeps text readable over a busy photo.', style: 'margin-top:6px' }));
@@ -1653,6 +1693,7 @@
 
   async function autoDesign(btn){
     if (!settings.apiKey){ showToast('Add an Anthropic API key in Settings to use this'); return; }
+    const before = snapshot();
     const occ = currentOccasion(), about = personNotes();
     const old = btn.textContent; btn.disabled = true; btn.textContent = 'Designing…';
     showToast('Asking Claude to design this card…');
@@ -1719,7 +1760,7 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
       }
       await Promise.all([fontDef('display', state.style.display), fontDef('body', state.style.body), fontDef('hand', state.style.hand)].map(loadFont));
       selected = null; resetHistory(); touch(); buildAll();
-      showToast('Designed! Tweak anything you like, or tap again for another take.');
+      toastUndo('Designed! Tweak anything you like, or tap again for another take.', () => restoreState(before));
     } catch (e) {
       if (String(e.message).startsWith('HTTP 401')) showToast('Claude rejected the API key — check it in Settings');
       else if (e.name === 'AbortError') showToast('Claude took too long — try again');
@@ -1786,6 +1827,7 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
   }
   function applyLook(id){
     const look = byId(LOOKS, id); if (!look) return;
+    const before = snapshot();
     const c = lookContext(); c.note = look.note;
     if (look.needs === 'slot'){
       state.layoutId = 'photo-hero';
@@ -1808,11 +1850,20 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     state.lookId = id;
     Promise.all(Object.values(look.fonts).map((fid, i) => loadFont(fontDef(['display', 'body', 'hand'][i], fid)))).then(render);
     selected = null; touch(); buildAll();
-    showToast(look.name + ' — tap any piece or text to change it');
+    toastUndo(look.name + ' — tap any piece or text to change it', () => restoreState(before));
+  }
+  function removeLook(){
+    const before = snapshot();
+    const name = clearLook();
+    touch(); buildAll();
+    toastUndo((name || 'Look') + ' removed — your card text is back', () => restoreState(before));
   }
   // A look needs a photo first; if there isn't one, ask for it and apply once it lands.
   function startLook(id){
     const look = byId(LOOKS, id);
+    // A photo already on the card counts, wherever it currently sits.
+    if (look.needs === 'slot' && !state.photos[0] && state.background.photo) carryPhoto({ id: 'photo-hero', photoSlots: 1 });
+    else if (look.needs === 'bg' && !state.background.photo && state.photos[0]) carryPhoto({ id: 'big-name', photoSlots: 0 });
     const has = look.needs === 'slot' ? !!state.photos[0] : !!state.background.photo;
     if (has){ applyLook(id); return; }
     pendingLook = id; $('lookPhotoIn').click();
@@ -1823,6 +1874,7 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     const grid = el('div', { class: 'chip-grid' });
     LOOKS.forEach(l => grid.appendChild(el('button', { class: 'chip', type: 'button', 'aria-pressed': state.lookId === l.id ? 'true' : 'false', onclick: () => startLook(l.id) }, [el('span', { text: l.name }), el('small', { text: l.desc })])));
     p.appendChild(grid);
+    if (state.lookId) p.appendChild(el('div', { class: 'row', style: 'margin-top:10px' }, [toolBtn('Remove look', removeLook)]));
     const input = el('input', { type: 'file', accept: 'image/*', id: 'lookPhotoIn', class: 'sr-only', 'aria-label': 'Photo for this look' });
     input.addEventListener('change', () => {
       const file = input.files[0]; if (!file || !pendingLook) return;
@@ -1860,8 +1912,8 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
       bgPhotoSection(p);
       p.appendChild(lbl('Or a photo layout'));
       p.appendChild(el('div', { class: 'row' }, [
-        toolBtn('Photo Hero', () => { state.layoutId = 'photo-hero'; touch(); buildAll(); }),
-        toolBtn('Collage', () => { state.layoutId = 'collage'; touch(); buildAll(); })
+        toolBtn('Photo Hero', () => setLayout('photo-hero')),
+        toolBtn('Collage', () => setLayout('collage'))
       ]));
       return;
     }
@@ -1905,12 +1957,57 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     if (state.stickers.length) p.appendChild(toolBtn('Clear all stickers', () => { state.stickers = []; selected = null; touch(); render(); renderSelBar(); buildStickersPanel(); }));
   }
 
+  const snapshot = () => cloneState(state);
+  function restoreState(snap){ state = snap; selected = null; occasionExpanded = false; touch(); buildAll(); }
+  // A look owns the card's text visibility and drops its own pieces; when the layout changes the
+  // composition no longer applies, so it comes off cleanly instead of leaving a blank card behind.
+  function clearLook(){
+    const look = byId(LOOKS, state.lookId);
+    state.stickers = state.stickers.filter(x => !x.look);
+    state.texts = state.texts.filter(t => !t.look);
+    state.style.show = SHOW_ALL();
+    state.style.shadow = 'none';
+    state.lookId = null;
+    return look ? look.name : '';
+  }
+  // A photo must never quietly disappear because the layout changed: layouts with slots hold it in
+  // slot 1, layouts without slots hold it as the background.
+  function carryPhoto(next){
+    const bg = state.background;
+    if (next.photoSlots === 0 && state.photos[0] && !bg.photo){
+      bg.photo = Object.assign({}, state.photos[0], { mask: 'full-bleed' });
+      bg.type = 'photo'; state.photos[0] = null;
+      if (state.style.color === 'ink') state.style.color = 'white';
+      return 'your photo moved to the background';
+    }
+    if (next.photoSlots > 0 && !state.photos[0] && bg.photo && bg.type === 'photo'){
+      state.photos[0] = Object.assign({}, bg.photo, { mask: next.id === 'collage' ? 'full-bleed' : 'circle' });
+      bg.photo = null; bg.type = 'solid';
+      if (state.style.color === 'white') state.style.color = 'ink';
+      return 'your photo moved into the layout';
+    }
+    return '';
+  }
+  function setLayout(id){
+    const next = byId(LAYOUTS, id); if (!next || next.id === state.layoutId) return;
+    const before = snapshot();
+    state.layoutId = next.id;
+    const moved = carryPhoto(next);
+    const lookName = state.lookId ? clearLook() : '';
+    touch(); buildAll();
+    const bits = [];
+    if (lookName) bits.push(lookName + ' removed');
+    if (moved) bits.push(moved);
+    if (bits.length) toastUndo(next.name + ' — ' + bits.join(', '), () => restoreState(before));
+    else showToast(next.name);
+  }
+
   function buildLayoutPanel(){
     const p = $('panelLayout'); p.textContent = '';
     p.appendChild(lbl('Layout', 'margin-bottom:10px'));
     const grid = el('div', { class: 'chip-grid' });
     LAYOUTS.forEach(l => grid.appendChild(el('button', { class: 'chip', type: 'button', 'aria-pressed': l.id === state.layoutId ? 'true' : 'false',
-      onclick: () => { state.layoutId = l.id; touch(); buildAll(); } }, [el('span', { text: l.name }), el('small', { text: l.desc })])));
+      onclick: () => setLayout(l.id) }, [el('span', { text: l.name }), el('small', { text: l.desc })])));
     p.appendChild(grid);
     p.appendChild(lbl('Format'));
     p.appendChild(chipRow(Object.entries(FORMATS).map(([id, f]) => [id, f.label]), state.format, (id) => { state.format = id; touch(); buildAll(); }));
@@ -2057,13 +2154,14 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     draftsOverlay.hidden = false;
   }
   function loadDraft(d, opts = {}){
+    const before = snapshot();
     state = normalizeDraft(d);
     state.id = opts.copy ? null : d.id;
     state.title = opts.copy ? '' : (d.title || '');
     delete state.sent; delete state.sentVia; delete state.sentAt; delete state.file; delete state.mime; delete state.driveId; delete state.driveLink;
     if (opts.copy) state.sourceKey = null;
     selected = null; occasionExpanded = false; resetHistory(); touch(); buildAll(); showView('maker');
-    showToast(opts.copy ? 'Opened a copy of “' + (d.title || 'Untitled') + '”' : 'Opened “' + state.title + '”');
+    toastUndo(opts.copy ? 'Opened a copy of “' + (d.title || 'Untitled') + '”' : 'Opened “' + state.title + '”', () => restoreState(before));
   }
 
   // ---------- export / share ----------
@@ -3142,7 +3240,7 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     let hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) showToast('Celebrate updated — reload to get the new version', 6000); hadController = true; });
   }
-  window.__celebrate = { state: () => state, upcomingItems, extractName, matchKeyword, PALETTES, OCCASIONS, DB, undo, redo, skipped: () => skipped, people: () => people, aliases: () => aliases, cardIndex: () => cardIndex, openPerson, STICKERS, ANIMS, applyAllAnims, buildAll, LOOKS, applyLook, lastCardFor, storageSummary, pruneOldImages, isMilestone, countLabel, setToken: (t) => { token = t; } };
+  window.__celebrate = { state: () => state, upcomingItems, extractName, matchKeyword, PALETTES, OCCASIONS, DB, undo, redo, skipped: () => skipped, people: () => people, aliases: () => aliases, cardIndex: () => cardIndex, openPerson, STICKERS, ANIMS, applyAllAnims, buildAll, setLayout, removeLook, syncNav, LOOKS, applyLook, lastCardFor, storageSummary, pruneOldImages, isMilestone, countLabel, setToken: (t) => { token = t; } };
 })();
 </script>
 </body>
