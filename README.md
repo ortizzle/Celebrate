@@ -61,6 +61,10 @@ the rest never sneak up on you. Single `index.html`, no build step, deployed on 
   this year's is different on purpose.
 - **Email** hands the PNG to your mail app through the share sheet (Gmail attaches it); where file
   sharing isn't available it downloads the PNG and opens a prefilled email instead.
+- **Today, and how long you have** — the header carries today's date on every screen, and the
+  days-until leads each row on Upcoming and People in bold ("Today" as a badge, "Tomorrow" and
+  anything inside a week in accent). People counts down past the 30-day scan window, so someone
+  six months out still shows "in 200 days", and anyone with a date recorded appears there.
 - **Getting back** — Android's Back button closes the open sheet, then leaves the editor for
   Upcoming, instead of walking out of the app. Anything that rearranges the card in one tap (a look,
   a layout change, Auto-design, opening a copy) says what it did and offers **Undo** in the toast.

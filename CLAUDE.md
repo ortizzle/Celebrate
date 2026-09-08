@@ -54,6 +54,13 @@ close an overlay outside a `.overlay` element or the stack drifts.
 vanishes, clears an active look (`clearLook`, restoring `show` flags), and offers `toastUndo`.
 Any single tap that rearranges the card must offer `toastUndo` with a `snapshot()` taken first.
 
+## Dates on screen
+
+`renderToday()` fills the header label and re-runs on `visibilitychange` so an app left open
+overnight is not a day behind. `whenEl(days)` is the bold countdown used by Upcoming rows, People
+rows and the person sheet; `nextAnnual(md)` gives the next time a month-day comes around, which is
+how People counts down beyond the 30-day scan window. All of it is Arizona-local via `AZ`.
+
 ## Tests
 
 `tests/run.sh` runs every `tests/*.test.js` (Playwright, headless) against a local static server.

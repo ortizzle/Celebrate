@@ -65,7 +65,9 @@
   .wordmark{ display:flex; align-items:center; gap:10px; color:#fff; background:none; border:none; padding:0; min-height:48px; cursor:pointer; text-align:left; font:inherit; border-radius:12px; }
   .wordmark h1{ font-size:1.5rem; font-weight:800; letter-spacing:.2px; line-height:1; }
   .wordmark .tag{ display:block; font-family:'Caveat',cursive; font-size:1rem; color:rgba(255,255,255,.78); margin-top:2px; }
-  .ruler{ display:flex; gap:6px; margin-bottom:14px; }
+  .rulerbar{ display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  .ruler{ display:flex; gap:6px; flex:1; overflow:hidden; }
+  .today{ font-family:'Caveat',cursive; font-size:1.1rem; font-weight:700; color:rgba(255,255,255,.9); white-space:nowrap; }
   .ruler span{ width:2px; height:8px; background:var(--mat-tick); }
   .ruler span:nth-child(5n){ height:14px; }
 
@@ -296,6 +298,9 @@
   .occ-main{ min-width:0; }
   .occ-name{ font-weight:700; font-size:1rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .occ-meta{ font-size:.8rem; color:var(--ink-soft); display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .occ-meta .when, .skip-row .when{ font-weight:800; font-size:.84rem; color:var(--ink); }
+  .when.soon{ color:var(--accent); }
+  .when.now{ background:var(--accent); color:var(--accent-ink); border-radius:999px; padding:2px 9px; }
   .pill{ display:inline-block; font-size:.7rem; font-weight:700; padding:2px 8px; border-radius:999px; background:var(--paper); border:1px solid var(--paper-edge); letter-spacing:.02em; }
   .pill.made{ background:var(--ok); color:#fff; border-color:transparent; }
   .occ-actions{ display:flex; gap:6px; align-items:center; }
@@ -367,7 +372,10 @@
       </button>
     </div>
   </header>
-  <div class="ruler" aria-hidden="true" id="ruler"></div>
+  <div class="rulerbar">
+    <div class="ruler" aria-hidden="true" id="ruler"></div>
+    <span class="today" id="todayLabel"></span>
+  </div>
 
   <!-- Upcoming -->
   <main id="viewUpcoming">
@@ -643,7 +651,7 @@
 <script>
 (function(){
   'use strict';
-  const APP_VERSION = '1.9.0';
+  const APP_VERSION = '1.9.1';
 
   // ---------- helpers ----------
   function el(tag, attrs, kids){
@@ -1088,6 +1096,10 @@
   // ---------- navigation ----------
   const ruler = $('ruler');
   for (let i = 0; i < 40; i++) ruler.appendChild(el('span'));
+  function renderToday(){
+    const [y, m, d] = AZ.today().split('-').map(Number);
+    $('todayLabel').textContent = 'Today · ' + new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  }
 
   function showView(which){
     $('viewUpcoming').hidden = which !== 'upcoming';
@@ -2512,6 +2524,13 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     return Math.round(h / 24) + ' day' + (h >= 48 ? 's' : '') + ' ago';
   }
 
+  const whenLabel = (days) => days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : days < 0 ? Math.abs(days) + (days === -1 ? ' day ago' : ' days ago') : 'in ' + days + ' days';
+  const whenEl = (days, style) => el('b', { class: 'when' + (days === 0 ? ' now' : days > 0 && days <= 7 ? ' soon' : ''), text: whenLabel(days), style: style || '' });
+  // The next time a month–day comes around, so People counts down past the 30-day scan window too.
+  function nextAnnual(md){
+    const today = AZ.today(), y = Number(today.slice(0, 4));
+    return (y + '-' + md) >= today ? (y + '-' + md) : ((y + 1) + '-' + md);
+  }
   const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][Math.min(n % 10, 4)] || 'th');
   const countLabel = (occId, n) => occId === 'birthday' ? 'turns ' + n : occId === 'anniversary' ? n + (n === 1 ? ' year' : ' years') : ordinal(n) + ' year';
   // Birthdays under 21 and every fifth year after are worth a big number on the card; anniversaries always are.
@@ -2637,9 +2656,9 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     // "Made" for this occurrence: a card actually sent from this row, or marked done by hand.
     const isMade = !!made[it.key] || cards.sent.some(c => c.sourceKey === it.key);
     const parts = AZ.parts(it.date);
-    const when = it.days === 0 ? 'Today' : it.days === 1 ? 'Tomorrow' : `in ${it.days} days`;
     const meta = el('div', { class: 'occ-meta' }, [
-      el('span', { text: `${occ.label} · ${parts.wd} · ${when}` }),
+      whenEl(it.days),
+      el('span', { text: `${occ.label} · ${parts.wd}` }),
       isMade ? el('span', { class: 'pill made', text: 'Card sent' }) : null,
       cards.drafts.length ? el('span', { class: 'pill', text: cards.drafts.length + (cards.drafts.length === 1 ? ' draft' : ' drafts') }) : null,
       cards.sent.length ? el('span', { class: 'pill', text: cards.sent.length + (cards.sent.length === 1 ? ' past card' : ' past cards') }) : null,
@@ -2714,6 +2733,8 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
   function peopleIndex(opts = {}){
     const map = new Map();
     Object.values(people).forEach(p => map.set(p.key, { key: p.key, name: p.name, saved: true, notes: p.notes || '', next: null }));
+    // Anyone with a date recorded belongs here, even one further out than the 30-day scan window.
+    manual.forEach(m => { const k = pkey(m.name); if (k && !map.has(k)) map.set(k, { key: k, name: m.name, saved: false, notes: '', next: null }); });
     upcomingItems().forEach(it => {
       const k = pkey(it.name); if (!k) return;
       if (!map.has(k)) map.set(k, { key: k, name: it.name, saved: false, notes: '', next: null });
@@ -2817,10 +2838,17 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
   function personRow(x){
     const initials = x.name.split(/\s+/).map(w => w[0] || '').join('').slice(0, 2).toUpperCase() || '?';
     const c = cardsFor(x.key);
-    let nextText = 'No upcoming dates';
-    if (x.next){ const occ = byId(OCCASIONS, x.next.occasionId) || byId(OCCASIONS, 'congrats'); const parts = AZ.parts(x.next.date); nextText = occ.label + ' · ' + parts.mon + ' ' + parts.day; }
-    else { const d = personDates(x.key)[0]; if (d){ const occ = byId(OCCASIONS, d.occasionId) || byId(OCCASIONS, 'congrats'); const parts = AZ.parts(d.date); nextText = occ.label + ' · ' + parts.mon + ' ' + parts.day; } }
+    let nextText = 'No dates yet', days = null;
+    // Sorted by when it next comes around, not by month — otherwise January wins all year.
+    const soon = x.next ? { occasionId: x.next.occasionId, date: x.next.date }
+      : personDates(x.key).map(d => ({ occasionId: d.occasionId, date: nextAnnual(d.md) })).sort((a, b) => a.date.localeCompare(b.date))[0];
+    if (soon){
+      const occ = byId(OCCASIONS, soon.occasionId) || byId(OCCASIONS, 'congrats'), parts = AZ.parts(soon.date);
+      nextText = occ.label + ' · ' + parts.mon + ' ' + parts.day;
+      days = AZ.daysBetween(AZ.today(), soon.date);
+    }
     const meta = el('div', { class: 'occ-meta' }, [
+      days === null ? null : whenEl(days),
       el('span', { text: nextText }),
       c.sent.length ? el('span', { class: 'pill', text: c.sent.length + (c.sent.length === 1 ? ' card' : ' cards') }) : null,
       c.drafts.length ? el('span', { class: 'pill', text: c.drafts.length + (c.drafts.length === 1 ? ' draft' : ' drafts') }) : null,
@@ -2952,7 +2980,11 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
       const m = d.manualId ? manual.find(x => x.id === d.manualId) : null;
       let ageText = '';
       if (m && m.yearly){ const origin = Number(m.date.slice(0, 4)), thisY = Number(AZ.today().slice(0, 4)), nextY = d.md >= AZ.today().slice(5) ? thisY : thisY + 1; if (nextY > origin) ageText = ' · ' + countLabel(d.occasionId, nextY - origin) + ' next'; }
-      const kids = [el('span', { text: occ.label + ' · ' + parts.mon + ' ' + parts.day + (m ? ageText : ' · from your calendar') })];
+      const upcoming = m && !m.yearly ? m.date : nextAnnual(d.md);
+      const kids = [
+        el('span', { text: occ.label + ' · ' + parts.mon + ' ' + parts.day + (m ? ageText : ' · from your calendar') }),
+        whenEl(AZ.daysBetween(AZ.today(), upcoming), 'margin-right:auto')
+      ];
       if (m) kids.push(el('div', { class: 'row', style: 'gap:6px' }, [
         el('a', { class: 'btn quiet', href: calendarLink(p.name, occ, m.date, m.yearly), target: '_blank', rel: 'noopener', text: 'Add to Google Calendar ↗' }),
         toolBtn('Remove', async () => { if (!await confirmSheet({ title: 'Remove this date?', message: occ.label + ', ' + AZ.pretty(m.date) + '.', okText: 'Remove' })) return; manual = manual.filter(x => x.id !== m.id); Store.set('manual', manual); buildUpcoming(false); openPerson(key); })
@@ -3232,15 +3264,15 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     await pruneOldImages();
     await refreshCardIndex(); buildUpcoming(false);
   }
-  buildAll(); buildUpcoming(); showView('upcoming'); init();
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible'){ buildUpcoming(); kickAnim(); } });
+  renderToday(); buildAll(); buildUpcoming(); showView('upcoming'); init();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible'){ renderToday(); buildUpcoming(); buildPeople(); kickAnim(); } });
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')){
     navigator.serviceWorker.register('sw.js').catch(() => {});
     let hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) showToast('Celebrate updated — reload to get the new version', 6000); hadController = true; });
   }
-  window.__celebrate = { state: () => state, upcomingItems, extractName, matchKeyword, PALETTES, OCCASIONS, DB, undo, redo, skipped: () => skipped, people: () => people, aliases: () => aliases, cardIndex: () => cardIndex, openPerson, STICKERS, ANIMS, applyAllAnims, buildAll, setLayout, removeLook, syncNav, LOOKS, applyLook, lastCardFor, storageSummary, pruneOldImages, isMilestone, countLabel, setToken: (t) => { token = t; } };
+  window.__celebrate = { state: () => state, upcomingItems, extractName, matchKeyword, PALETTES, OCCASIONS, DB, undo, redo, skipped: () => skipped, people: () => people, aliases: () => aliases, cardIndex: () => cardIndex, openPerson, STICKERS, ANIMS, applyAllAnims, buildAll, setLayout, removeLook, syncNav, whenLabel, nextAnnual, renderToday, LOOKS, applyLook, lastCardFor, storageSummary, pruneOldImages, isMilestone, countLabel, setToken: (t) => { token = t; } };
 })();
 </script>
 </body>
