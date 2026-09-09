@@ -23,6 +23,11 @@ the rest never sneak up on you. Single `index.html`, no build step, deployed on 
   size sliders, alignment, text position/spacing, auto-shrink-to-fit for long messages), undo/redo,
   named saved drafts with thumbnails, and a live preview that stays pinned in view while the editor
   below it scrolls.
+- **Photo frames** — twelve frames painted around the photo itself, offered occasion-first
+  ("Frames for Birthday" before the full list): museum mat, gold leaf, pearls, party confetti,
+  holly, petals, garden, starlight, scallop, film strip, taped corners, ribbon edge. A frame
+  follows the photo's shape, so it works on a circle, arch, blob, polaroid or full-bleed photo and
+  on a background photo alike.
 - **Looks** — under Photo: six ready-made photo overlays (Golden Hour, Confetti Pop, Soft Glow,
   Bold Banner, Wreath, Polaroid) that drop onto your photo already personalised with the name, the
   age or years, and a short note. Every piece stays an ordinary sticker or text block afterwards.

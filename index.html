@@ -654,7 +654,7 @@
 <script>
 (function(){
   'use strict';
-  const APP_VERSION = '1.9.2';
+  const APP_VERSION = '1.10.0';
 
   // ---------- helpers ----------
   function el(tag, attrs, kids){
@@ -996,6 +996,11 @@
     if (!FORMATS[d.format]) out.format = d.orientation === 'landscape' ? 'landscape' : 'portrait';
     delete out.orientation; delete out.thumb; delete out.savedAt; delete out.draftId; delete out.file; delete out.mime; delete out.driveId; delete out.driveLink;
     if (!Array.isArray(out.photos) || out.photos.length < 3) out.photos = [out.photos?.[0] || null, out.photos?.[1] || null, null];
+    [...out.photos, out.background && out.background.photo].forEach(p => {
+      if (!p || p.frame) return;
+      p.frame = p.border && p.border !== 'none' ? 'mat' : 'none';   // the old thin/thick border reads as the mat frame
+      delete p.border;
+    });
     out.style = Object.assign(defaultStyle(), out.style || {});
     out.style.sizes = Object.assign({ kicker: 1, name: 1, message: 1, from: 1 }, out.style.sizes || {});
     out.style.show = Object.assign(SHOW_ALL(), out.style.show || {});
@@ -1270,6 +1275,136 @@
     }
     else { ctx.rect(0, 0, w, h); }
   }
+  // ---------- photo frames ----------
+  // Painted onto the photo's own canvas, following its mask path, so one frame works with every
+  // shape and layout — and because the canvas *is* what html2canvas copies, the export is literally
+  // what you previewed. Corner ornaments are drawn in units of 1% of the short side so they keep
+  // their proportions on a 340px preview and a 1080px export alike.
+  function frameOutline(ctx, o, inset){
+    ctx.save();
+    ctx.translate(inset, inset);
+    ctx.scale((o.w - 2 * inset) / o.w, (o.h - 2 * inset) / o.h);
+    maskPath(ctx, o.mask, o.w, o.h);
+    ctx.restore();   // path keeps the transform it was built under; the line width does not
+  }
+  function strokeFrame(ctx, o, inset, width, color, dash){
+    ctx.save();
+    frameOutline(ctx, o, inset);
+    ctx.lineWidth = width; ctx.strokeStyle = color; ctx.lineJoin = 'round';
+    if (dash){ ctx.setLineDash(dash); ctx.lineCap = 'round'; }
+    ctx.stroke();
+    ctx.restore();
+  }
+  // Same ornament at all four corners, rotated so it always points into the photo.
+  function atCorners(ctx, o, pad, draw){
+    [[pad, pad, 0], [o.w - pad, pad, 90], [o.w - pad, o.h - pad, 180], [pad, o.h - pad, 270]].forEach(([x, y, deg]) => {
+      ctx.save(); ctx.translate(x, y); ctx.rotate(deg * Math.PI / 180); ctx.scale(o.u, o.u); draw(ctx, o); ctx.restore();
+    });
+  }
+  const dot = (c, x, y, r) => { c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill(); };
+  const leaf = (c, x, y, deg, len) => { c.save(); c.translate(x, y); c.rotate(deg * Math.PI / 180); c.beginPath(); c.moveTo(0, 0); c.quadraticCurveTo(len * .5, -len * .3, len, 0); c.quadraticCurveTo(len * .5, len * .3, 0, 0); c.fill(); c.restore(); };
+  const star = (c, x, y, r) => { c.beginPath(); for (let i = 0; i < 10; i++){ const a = (i * 36 - 90) * Math.PI / 180, rr = i % 2 ? r * .45 : r; c.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } c.closePath(); c.fill(); };
+  const rrect = (c, x, y, w, h, r) => { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); };
+  const gold = (ctx, o) => { const g = ctx.createLinearGradient(0, 0, o.w, o.h); g.addColorStop(0, '#ffeaa8'); g.addColorStop(.4, '#c9a13a'); g.addColorStop(.7, '#ffeaa8'); g.addColorStop(1, '#b8901f'); return g; };
+
+  const PHOTO_FRAMES = [
+    { id: 'none', name: 'None', occasions: [] },
+    { id: 'mat', name: 'Museum mat', occasions: ['thankyou', 'sympathy', 'thinking', 'getwell'],
+      paint(ctx, o){ strokeFrame(ctx, o, o.u * 3, o.u * 6, o.pal.paper); strokeFrame(ctx, o, o.u * 6.4, o.u * .7, 'rgba(0,0,0,.32)'); } },
+    { id: 'gold', name: 'Gold leaf', occasions: ['wedding', 'anniversary', 'graduation', 'newyear', 'thanksgiving'],
+      paint(ctx, o){ const g = gold(ctx, o); strokeFrame(ctx, o, o.u * 2, o.u * 3.2, g); strokeFrame(ctx, o, o.u * 6.6, o.u * 1, g); } },
+    { id: 'pearls', name: 'Pearls', occasions: ['wedding', 'baby', 'anniversary', 'valentine'],
+      paint(ctx, o){ strokeFrame(ctx, o, o.u * 3.4, o.u * .7, 'rgba(255,255,255,.55)'); strokeFrame(ctx, o, o.u * 3.4, o.u * 2.8, o.pal.paper, [0, o.u * 4.4]); } },
+    { id: 'party', name: 'Party', occasions: ['birthday', 'congrats', 'proud', 'july4', 'halloween'],
+      paint(ctx, o){
+        strokeFrame(ctx, o, o.u * 3, o.u * 2.4, o.pal.accents[0]);
+        atCorners(ctx, o, o.u * 9, (c) => {
+          const cols = [o.pal.accents[1], o.pal.accents[2], '#ffffff'];
+          [[1, 7, 15], [8, 1, -25], [6, 10, 40], [13, 6, 8], [11, 12, -15]].forEach(([x, y, r], i) => {
+            c.save(); c.translate(x, y); c.rotate(r * Math.PI / 180); c.fillStyle = cols[i % 3];
+            if (i % 2) dot(c, 0, 0, 1.5); else c.fillRect(-1.7, -1.3, 3.4, 2.6);
+            c.restore();
+          });
+        });
+      } },
+    { id: 'holly', name: 'Holly', occasions: ['christmas'],
+      paint(ctx, o){
+        strokeFrame(ctx, o, o.u * 3, o.u * 2, '#2f7d4f');
+        atCorners(ctx, o, o.u * 8, (c) => {
+          c.fillStyle = '#2f7d4f'; leaf(c, 2, 6, 25, 9); leaf(c, 6, 2, -30, 9);
+          c.fillStyle = '#6fb36a'; leaf(c, 4, 4, 45, 6);
+          c.fillStyle = '#e02c45'; dot(c, 8, 8, 1.6); dot(c, 11, 6.4, 1.3); dot(c, 9.4, 11, 1.3);
+        });
+      } },
+    { id: 'petals', name: 'Petals', occasions: ['valentine', 'mothers', 'anniversary', 'wedding'],
+      paint(ctx, o){
+        strokeFrame(ctx, o, o.u * 3, o.u * 1.8, o.pal.accents[0]);
+        atCorners(ctx, o, o.u * 8, (c) => {
+          c.fillStyle = o.pal.accents[0];
+          for (let i = 0; i < 5; i++){ c.save(); c.translate(6, 6); c.rotate(i * 72 * Math.PI / 180); c.beginPath(); c.ellipse(0, -3.4, 2.1, 3.6, 0, 0, Math.PI * 2); c.fill(); c.restore(); }
+          c.fillStyle = '#ffd166'; dot(c, 6, 6, 1.9);
+          c.fillStyle = o.pal.accents[1]; dot(c, 12.5, 10, 1.4); dot(c, 10, 12.8, 1.1);
+        });
+      } },
+    { id: 'garden', name: 'Garden', occasions: ['baby', 'thankyou', 'encourage', 'mothers', 'thanksgiving'],
+      paint(ctx, o){
+        strokeFrame(ctx, o, o.u * 3, o.u * 1.6, '#6fb36a');
+        atCorners(ctx, o, o.u * 8, (c) => {
+          c.strokeStyle = '#4f8a4c'; c.lineWidth = .9; c.beginPath(); c.moveTo(1, 1); c.quadraticCurveTo(8, 5, 13, 13); c.stroke();
+          c.fillStyle = '#6fb36a'; leaf(c, 3, 2.4, 30, 6); leaf(c, 7, 5.6, 62, 5.4); leaf(c, 10.4, 9.6, 34, 4.6);
+        });
+      } },
+    { id: 'stars', name: 'Starlight', occasions: ['graduation', 'newyear', 'july4', 'encourage', 'proud', 'fathers'],
+      paint(ctx, o){
+        strokeFrame(ctx, o, o.u * 3, o.u * 2, o.pal.accents[2] || o.pal.accents[0]);
+        atCorners(ctx, o, o.u * 8, (c) => {
+          c.fillStyle = o.pal.accents[1]; star(c, 5, 5, 4.2);
+          c.fillStyle = '#ffffff'; star(c, 11.5, 3.5, 2.2); star(c, 3.5, 11.5, 2.6);
+        });
+      } },
+    { id: 'scallop', name: 'Scallop', occasions: ['birthday', 'baby', 'congrats'],
+      paint(ctx, o){
+        const r = o.u * 4.2;
+        ctx.save(); ctx.fillStyle = o.pal.paper;
+        ctx.beginPath(); ctx.rect(0, 0, o.w, o.h); ctx.rect(r, r, o.w - 2 * r, o.h - 2 * r); ctx.fill('evenodd');
+        const n = Math.max(3, Math.round((o.w - 2 * r) / (r * 2))), m = Math.max(3, Math.round((o.h - 2 * r) / (r * 2)));
+        for (let i = 0; i < n; i++){ const x = r + (o.w - 2 * r) * (i + .5) / n; dot(ctx, x, r, r * .92); dot(ctx, x, o.h - r, r * .92); }
+        for (let j = 0; j < m; j++){ const y = r + (o.h - 2 * r) * (j + .5) / m; dot(ctx, r, y, r * .92); dot(ctx, o.w - r, y, r * .92); }
+        ctx.restore();
+      } },
+    { id: 'film', name: 'Film strip', occasions: ['fathers', 'halloween'],
+      paint(ctx, o){
+        const b = o.u * 9, hw = b * .52, hh = b * .4, step = b * 1.6;
+        ctx.save(); ctx.fillStyle = 'rgba(22,20,18,.92)';
+        ctx.fillRect(0, 0, o.w, b); ctx.fillRect(0, o.h - b, o.w, b);
+        ctx.fillStyle = '#f5f2ea';
+        for (let x = step * .35; x < o.w - hw; x += step){
+          rrect(ctx, x, (b - hh) / 2, hw, hh, hh * .3); ctx.fill();
+          rrect(ctx, x, o.h - b + (b - hh) / 2, hw, hh, hh * .3); ctx.fill();
+        }
+        ctx.restore();
+      } },
+    { id: 'tape', name: 'Taped', occasions: [],
+      paint(ctx, o){
+        atCorners(ctx, o, o.u * 6, (c) => {
+          c.rotate(45 * Math.PI / 180);
+          c.fillStyle = 'rgba(255,214,102,.72)'; c.fillRect(-11, -3, 22, 6);
+          c.strokeStyle = 'rgba(255,255,255,.45)'; c.lineWidth = .6; c.strokeRect(-11, -3, 22, 6);
+        });
+      } },
+    { id: 'ribbon', name: 'Ribbon edge', occasions: ['christmas', 'congrats', 'thankyou'],
+      paint(ctx, o){
+        strokeFrame(ctx, o, o.u * 3, o.u * 3.4, o.pal.accents[0]);
+        strokeFrame(ctx, o, o.u * 3, o.u * 1, 'rgba(255,255,255,.5)', [o.u * 3, o.u * 3]);
+      } }
+  ];
+  const frameById = (id) => PHOTO_FRAMES.find(f => f.id === id) || PHOTO_FRAMES[0];
+  function paintFrame(ctx, photo, mask, w, h, pal){
+    const f = photo && photo.frame && frameById(photo.frame);
+    if (!f || !f.paint) return;
+    f.paint(ctx, { mask, w, h, pal, u: Math.min(w, h) / 100 });
+  }
+
   function photoGeometry(photo, img, w, h){
     const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
     const cover = Math.max(w / iw, h / ih) * photo.scale;
@@ -1295,10 +1430,6 @@
     if (img){
       const g = photoGeometry(photo, img, w, h);
       ctx.drawImage(filteredImage(photo, img), g.dx, g.dy, g.dw, g.dh);
-      if (photo.border && photo.border !== 'none'){
-        ctx.lineWidth = (photo.border === 'thick' ? 8 : 3) * 2;  // half of the stroke is clipped away, so this reads as an inner border
-        ctx.strokeStyle = pal.paper; maskPath(ctx, mask, w, h); ctx.stroke();
-      }
     } else {
       ctx.fillStyle = pal.accents[1]; ctx.globalAlpha = .45; ctx.fillRect(0, 0, w, h); ctx.globalAlpha = 1;
       ctx.strokeStyle = pal.accents[0]; ctx.lineWidth = 2; ctx.globalAlpha = .5;
@@ -1306,6 +1437,7 @@
       ctx.globalAlpha = 1;
     }
     ctx.restore();
+    paintFrame(ctx, photo, mask, w, h, pal);
   }
   function drawPattern(canvas, pattern, pal){
     const c = prepCanvas(canvas); if (!c) return;
@@ -1806,7 +1938,15 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     const box = el('div');
     if (masks){ box.appendChild(lbl('Shape', 'margin:8px 0 6px')); box.appendChild(chipRow(MASKS.map(m => [m.id, m.name]), photo.mask, (id) => { photo.mask = id; onChange(); })); }
     box.appendChild(lbl('Filter', 'margin:8px 0 6px')); box.appendChild(chipRow(FILTER_LABELS, photo.filter || 'none', (id) => { photo.filter = id; onChange(); }));
-    if (masks){ box.appendChild(lbl('Border', 'margin:8px 0 6px')); box.appendChild(chipRow([['none', 'None'], ['thin', 'Thin'], ['thick', 'Thick']], photo.border || 'none', (id) => { photo.border = id; onChange(); })); }
+    const pick = (id) => { photo.frame = id; onChange(); };
+    const occ = currentOccasion();
+    const suggested = PHOTO_FRAMES.filter(f => f.occasions.includes(occ.id));
+    if (suggested.length){
+      box.appendChild(lbl('Frames for ' + occ.label, 'margin:10px 0 6px'));
+      box.appendChild(chipRow(suggested.map(f => [f.id, f.name]), photo.frame || 'none', pick));
+      box.appendChild(lbl('All frames', 'margin:10px 0 6px'));
+    } else box.appendChild(lbl('Frame', 'margin:10px 0 6px'));
+    box.appendChild(chipRow(PHOTO_FRAMES.map(f => [f.id, f.name]), photo.frame || 'none', pick));
     return box;
   }
 
@@ -1896,8 +2036,8 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
       const id = pendingLook; pendingLook = null;
       importPhoto(file, (dataUrl) => {
         const look = byId(LOOKS, id);
-        if (look.needs === 'slot') state.photos[0] = { id: 'p' + Date.now(), dataUrl, mask: 'polaroid', fx: .5, fy: .5, scale: 1, filter: 'none', border: 'none' };
-        else state.background.photo = { id: 'pbg' + Date.now(), dataUrl, mask: 'full-bleed', fx: .5, fy: .5, scale: 1, filter: 'none', border: 'none' };
+        if (look.needs === 'slot') state.photos[0] = { id: 'p' + Date.now(), dataUrl, mask: 'polaroid', fx: .5, fy: .5, scale: 1, filter: 'none', frame: 'none' };
+        else state.background.photo = { id: 'pbg' + Date.now(), dataUrl, mask: 'full-bleed', fx: .5, fy: .5, scale: 1, filter: 'none', frame: 'none' };
         applyLook(id);
       });
     });
@@ -1907,7 +2047,7 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     const b = state.background;
     p.appendChild(lbl('Background photo'));
     p.appendChild(photoPicker('photoInBgP', !!b.photo, (dataUrl) => {
-      b.photo = { id: 'pbg' + Date.now(), dataUrl, mask: 'full-bleed', fx: .5, fy: .5, scale: 1, filter: b.photo ? b.photo.filter : 'none', border: 'none' };
+      b.photo = { id: 'pbg' + Date.now(), dataUrl, mask: 'full-bleed', fx: .5, fy: .5, scale: 1, filter: b.photo ? b.photo.filter : 'none', frame: b.photo ? b.photo.frame : 'none' };
       b.type = 'photo'; if (state.style.color === 'ink') state.style.color = 'white';
       touch(); buildAll();
     }));
@@ -1916,6 +2056,7 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
       range.addEventListener('input', () => { b.scrim = Number(range.value); render(); touch(); });
       p.appendChild(el('div', { class: 'range-row', style: 'margin-top:8px' }, [el('span', { text: 'Darken' }), range]));
       p.appendChild(el('p', { class: 'hint', text: 'Drag on the card to reposition, pinch to zoom. Photos never leave this phone.', style: 'margin-top:6px' }));
+      p.appendChild(photoControls(b.photo, () => { touch(); buildAll(); }, { masks: false }));
     }
   }
 
@@ -1939,7 +2080,7 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
       const box = el('div', { class: 'field' });
       box.appendChild(el('label', { text: layout.photoSlots > 1 ? `Photo ${i + 1}` : 'Photo', for: 'photoIn' + i }));
       box.appendChild(photoPicker('photoIn' + i, !!photo, (dataUrl) => {
-        state.photos[i] = { id: 'p' + Date.now() + i, dataUrl, mask: photo ? photo.mask : (layout.id === 'collage' ? 'full-bleed' : 'circle'), fx: .5, fy: .5, scale: 1, filter: photo ? photo.filter : 'none', border: photo ? photo.border : 'none' };
+        state.photos[i] = { id: 'p' + Date.now() + i, dataUrl, mask: photo ? photo.mask : (layout.id === 'collage' ? 'full-bleed' : 'circle'), fx: .5, fy: .5, scale: 1, filter: photo ? photo.filter : 'none', frame: photo ? photo.frame : 'none' };
         touch(); buildAll();
       }));
       if (photo){
@@ -2064,7 +2205,7 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     } else if (b.type === 'photo'){
       const box = el('div', { style: 'margin-top:8px' });
       box.appendChild(photoPicker('photoInBg', !!b.photo, (dataUrl) => {
-        b.photo = { id: 'pbg' + Date.now(), dataUrl, mask: 'full-bleed', fx: .5, fy: .5, scale: 1, filter: b.photo ? b.photo.filter : 'none', border: 'none' };
+        b.photo = { id: 'pbg' + Date.now(), dataUrl, mask: 'full-bleed', fx: .5, fy: .5, scale: 1, filter: b.photo ? b.photo.filter : 'none', frame: b.photo ? b.photo.frame : 'none' };
         if (state.style.color === 'ink') state.style.color = 'white';
         touch(); buildAll();
       }));
@@ -3261,7 +3402,7 @@ Pick ONE creative, cohesive combination — don't default to the safest option. 
     let hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) showToast('Celebrate updated — reload to get the new version', 6000); hadController = true; });
   }
-  window.__celebrate = { state: () => state, upcomingItems, extractName, matchKeyword, PALETTES, OCCASIONS, DB, undo, redo, skipped: () => skipped, people: () => people, aliases: () => aliases, cardIndex: () => cardIndex, openPerson, STICKERS, ANIMS, applyAllAnims, buildAll, setLayout, removeLook, syncNav, whenLabel, nextAnnual, renderToday, LOOKS, applyLook, lastCardFor, storageSummary, pruneOldImages, isMilestone, countLabel, setToken: (t) => { token = t; } };
+  window.__celebrate = { state: () => state, upcomingItems, extractName, matchKeyword, PALETTES, OCCASIONS, DB, undo, redo, skipped: () => skipped, people: () => people, aliases: () => aliases, cardIndex: () => cardIndex, openPerson, STICKERS, ANIMS, applyAllAnims, PHOTO_FRAMES, normalizeDraft, buildAll, setLayout, removeLook, syncNav, whenLabel, nextAnnual, renderToday, LOOKS, applyLook, lastCardFor, storageSummary, pruneOldImages, isMilestone, countLabel, setToken: (t) => { token = t; } };
 })();
 </script>
 </body>

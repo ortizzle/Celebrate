@@ -44,6 +44,15 @@ and drops overlay stickers plus `look:true` text blocks filled from the person (
 a note). `applyLook` replaces all stickers and look/auto texts, keeps user text blocks. Photo looks
 hide the message (the note stands in) and put the sign-off at the bottom.
 
+## Photo frames
+
+`PHOTO_FRAMES` painters draw onto the photo's own canvas in `drawPhoto`, after the mask clip is
+released, so strokes and ornaments show in full. `frameOutline` rebuilds the mask path inset by n
+pixels (the path keeps the transform it was built under; the line width does not), which is why one
+frame works on every mask. `atCorners` scales by `u` (1% of the short side) so ornaments hold their
+proportions from a 340px preview to a 1080px export. Occasion suggestions come from each frame's
+`occasions` list — keep every occasion covered by at least one frame (the suite asserts it).
+
 ## Navigation and reversibility
 
 Every `.overlay` and the editor view maps to a history entry (`syncNav`, a MutationObserver on the
